@@ -1,0 +1,31 @@
+## .NET build outputs
+bin/
+obj/
+*.dll
+*.pdb
+*.exe
+*.nupkg
+*.snupkg
+
+## MonoGame content pipeline intermediates
+Content/obj/
+Content/bin/
+
+## Visual Studio / Rider
+.vs/
+.vscode/launch.json
+*.user
+*.suo
+*.userprefs
+
+## dotnet publish
+publish/
+out/
+
+## OS
+Thumbs.db
+.DS_Store
+Desktop.ini
+
+## Save data / user data (don't commit local playtesting saves)
+Grants/bin/Debug/net9.0/Saves/
