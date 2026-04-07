@@ -114,7 +114,7 @@ public class UpgradeTreeScreen : GameScreen
             // Branch header
             if (node.Branch != lastBranch)
             {
-                sb.DrawString(_smallFont, $"── {node.Branch} ──", new Vector2(x, y), Color.Gray);
+                sb.DrawString(_smallFont, $"-- {node.Branch} --", new Vector2(x, y), Color.Gray);
                 y += 16;
                 lastBranch = node.Branch;
             }
