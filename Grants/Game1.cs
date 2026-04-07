@@ -32,14 +32,15 @@ public class Game1 : Game
     protected override void Initialize()
     {
         // Register all screens
-        _screens[ScreenType.MainMenu]         = new MainMenuScreen();
-        _screens[ScreenType.FighterSelect]    = new FighterSelectScreen();
-        _screens[ScreenType.Fight]            = new FightScreen();
-        _screens[ScreenType.PostMatch]        = new PostMatchScreen();
-        _screens[ScreenType.UpgradeTree]      = new UpgradeTreeScreen();
-        _screens[ScreenType.Profile]          = new ProfileScreen();
-        _screens[ScreenType.CharacterBuilder] = new CharacterBuilderScreen();
-        _screens[ScreenType.KeywordEditor]    = new KeywordEditorScreen();
+        _screens[ScreenType.MainMenu]          = new MainMenuScreen();
+        _screens[ScreenType.FighterSelect]     = new FighterSelectScreen();
+        _screens[ScreenType.Fight]             = new FightScreen();
+        _screens[ScreenType.PostMatch]         = new PostMatchScreen();
+        _screens[ScreenType.UpgradeTree]       = new UpgradeTreeScreen();
+        _screens[ScreenType.UpgradeSelection]  = new UpgradeSelectionScreen();
+        _screens[ScreenType.Profile]           = new ProfileScreen();
+        _screens[ScreenType.CharacterBuilder]  = new CharacterBuilderScreen();
+        _screens[ScreenType.KeywordEditor]     = new KeywordEditorScreen();
 
         foreach (var screen in _screens.Values)
             screen.Initialize(this);

@@ -10,6 +10,7 @@ public enum ScreenType
     Fight,
     PostMatch,
     UpgradeTree,
+    UpgradeSelection,
     Profile,
     CharacterBuilder,
     KeywordEditor,

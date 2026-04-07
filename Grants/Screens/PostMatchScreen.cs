@@ -35,9 +35,6 @@ public class PostMatchScreen : GameScreen
         var progress = Game.PlayerProfile.GetOrCreateProgress(_fighterId);
         _previousPoints = progress.AvailablePoints;
         _newPoints = progress.AvailablePoints;
-
-        // Points already recorded by FightScreen before navigating here
-        _newPoints = Game.PlayerProfile.GetOrCreateProgress(_fighterId).AvailablePoints;
     }
 
     public override void Update(GameTime gameTime)
@@ -45,7 +42,22 @@ public class PostMatchScreen : GameScreen
         var keys = Keyboard.GetState();
 
         if (IsPressed(keys, _prevKeys, Keys.U))
-            SwitchTo(ScreenType.UpgradeTree, _fighterId);
+        {
+            // Calculate points earned in this match
+            var progress = Game.PlayerProfile.GetOrCreateProgress(_fighterId);
+            int pointsBefore = progress.AvailablePoints;
+            
+            // Update win record
+            if (_playerWon)
+            {
+                bool isPve = _match.MatchType == MatchType.PvE;
+                bool isCasual = _match.MatchType == MatchType.PvpCasual;
+                progress.RecordWin(isPve, isCasual);
+            }
+            
+            int pointsEarned = progress.AvailablePoints - pointsBefore;
+            SwitchTo(ScreenType.UpgradeSelection, (_fighterId, pointsEarned));
+        }
 
         if (IsPressed(keys, _prevKeys, Keys.R))
             SwitchTo(ScreenType.FighterSelect, _match.MatchType switch
