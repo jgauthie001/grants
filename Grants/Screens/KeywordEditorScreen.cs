@@ -80,7 +80,7 @@ public class KeywordEditorScreen : GameScreen
             _keywordManager.Save();
         }
 
-        if (IsPressed(keys, _prevKeys, Keys.Escape))
+        if (IsPressed(keys, _prevKeys, Keys.Back))
             SwitchTo(ScreenType.MainMenu);
     }
 
@@ -245,7 +245,7 @@ public class KeywordEditorScreen : GameScreen
         }
 
         // Footer
-        string footer = "[Up/Down] Navigate | [Enter] Edit | [S] Save | [R] Reset | [Esc] Back";
+        string footer = "[Up/Down] Navigate | [Enter] Edit | [S] Save | [R] Reset | [Backspace] Back";
         var footerSize = _smallFont.MeasureString(footer);
         sb.DrawString(_smallFont, footer,
             new Vector2(cx - footerSize.X / 2, viewportHeight - 40),
