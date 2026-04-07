@@ -39,6 +39,7 @@ public class Game1 : Game
         _screens[ScreenType.UpgradeTree]      = new UpgradeTreeScreen();
         _screens[ScreenType.Profile]          = new ProfileScreen();
         _screens[ScreenType.CharacterBuilder] = new CharacterBuilderScreen();
+        _screens[ScreenType.KeywordEditor]    = new KeywordEditorScreen();
 
         foreach (var screen in _screens.Values)
             screen.Initialize(this);
