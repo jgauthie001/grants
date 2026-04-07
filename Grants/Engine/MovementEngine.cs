@@ -29,7 +29,7 @@ public static class MovementEngine
         if (movement <= 0) return currentPos;
 
         // Determine direction: default is toward opponent unless Retreat keyword present
-        bool retreating = pair.AllKeywords.Contains(CardKeyword.Retreat);
+        bool retreating = pair.AllKeywords.ContainsKeyword(CardKeyword.Retreat);
         HexCoord direction = retreating
             ? currentPos - opponentPos
             : opponentPos - currentPos;

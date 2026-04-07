@@ -33,21 +33,21 @@ public enum RangeBracket
 public abstract class CardBase
 {
     public string Id { get; init; } = string.Empty;
-    public string Name { get; init; } = string.Empty;
-    public string Description { get; init; } = string.Empty;
+    public string Name { get; set; } = string.Empty;
+    public string Description { get; set; } = string.Empty;
 
     // Combat stats (base values — modified by upgrades at runtime via FighterProgress)
-    public int BasePower { get; init; }
-    public int BaseDefense { get; init; }
-    public int BaseSpeed { get; init; }       // -2 to +3
-    public int BaseMovement { get; init; }    // Hexes moved when this card is used
+    public int BasePower { get; set; }
+    public int BaseDefense { get; set; }
+    public int BaseSpeed { get; set; }       // -2 to +3
+    public int BaseMovement { get; set; }    // Hexes moved when this card is used
     public RangeBracket BaseRange { get; init; } = RangeBracket.Adjacent;
 
     // Keywords on this card (base set — upgrades may add keywords)
-    public List<CardKeyword> Keywords { get; init; } = new();
+    public List<CardKeywordValue> Keywords { get; init; } = new();
 
     // Cooldown (base — upgrades can reduce)
-    public int BaseCooldown { get; init; }
+    public int BaseCooldown { get; set; }
 
     // Upgrade slots — each slot holds the chosen upgrade once applied
     public UpgradeSlot SlotOne { get; set; } = new();

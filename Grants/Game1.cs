@@ -32,12 +32,13 @@ public class Game1 : Game
     protected override void Initialize()
     {
         // Register all screens
-        _screens[ScreenType.MainMenu]      = new MainMenuScreen();
-        _screens[ScreenType.FighterSelect] = new FighterSelectScreen();
-        _screens[ScreenType.Fight]         = new FightScreen();
-        _screens[ScreenType.PostMatch]     = new PostMatchScreen();
-        _screens[ScreenType.UpgradeTree]   = new UpgradeTreeScreen();
-        _screens[ScreenType.Profile]       = new ProfileScreen();
+        _screens[ScreenType.MainMenu]         = new MainMenuScreen();
+        _screens[ScreenType.FighterSelect]    = new FighterSelectScreen();
+        _screens[ScreenType.Fight]            = new FightScreen();
+        _screens[ScreenType.PostMatch]        = new PostMatchScreen();
+        _screens[ScreenType.UpgradeTree]      = new UpgradeTreeScreen();
+        _screens[ScreenType.Profile]          = new ProfileScreen();
+        _screens[ScreenType.CharacterBuilder] = new CharacterBuilderScreen();
 
         foreach (var screen in _screens.Values)
             screen.Initialize(this);
@@ -65,9 +66,41 @@ public class Game1 : Game
 
     public void SwitchScreen(ScreenType type, object? data = null)
     {
+        var logPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "game_debug.log");
+        try
+        {
+            using (var writer = new StreamWriter(logPath, append: true))
+            {
+                writer.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Switching to screen: {type}");
+                writer.Flush();
+            }
+        }
+        catch { }
+        
         _currentScreen.OnExit();
         _currentScreen = _screens[type];
+        
+        try
+        {
+            using (var writer = new StreamWriter(logPath, append: true))
+            {
+                writer.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Calling OnEnter for {type}");
+                writer.Flush();
+            }
+        }
+        catch { }
+        
         _currentScreen.OnEnter(data);
+        
+        try
+        {
+            using (var writer = new StreamWriter(logPath, append: true))
+            {
+                writer.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] OnEnter completed for {type}");
+                writer.Flush();
+            }
+        }
+        catch { }
     }
 
     protected override void Update(GameTime gameTime)

@@ -32,7 +32,7 @@ public class FighterInstance
     public Dictionary<string, int> UpgradedCardSpeed { get; set; } = new();
     public Dictionary<string, int> UpgradedCardMovement { get; set; } = new();
     public Dictionary<string, int> UpgradedCardCooldownReduction { get; set; } = new();
-    public Dictionary<string, List<CardKeyword>> UpgradedCardKeywords { get; set; } = new();
+    public Dictionary<string, List<CardKeywordValue>> UpgradedCardKeywords { get; set; } = new();
 
     // --- Passive item effects (from upgrade tree items) ---
     public List<string> ActiveItemIds { get; set; } = new();
@@ -150,9 +150,9 @@ public class FighterInstance
         return Math.Max(0, card.BaseCooldown - reduction);
     }
 
-    public List<CardKeyword> GetCardKeywords(CardBase card)
+    public List<CardKeywordValue> GetCardKeywords(CardBase card)
     {
-        var kws = new List<CardKeyword>(card.Keywords);
+        var kws = new List<CardKeywordValue>(card.Keywords);
         if (UpgradedCardKeywords.TryGetValue(card.Id, out var extra))
             kws.AddRange(extra);
         return kws;

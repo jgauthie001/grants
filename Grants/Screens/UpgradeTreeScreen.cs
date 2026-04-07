@@ -91,7 +91,7 @@ public class UpgradeTreeScreen : GameScreen
         sb.DrawString(_smallFont,
             $"Points available: {_progress.AvailablePoints}   Total wins: {_progress.TotalWins}   Power rating: {_progress.PowerRating}",
             new Vector2(20, 45), Color.LightGreen);
-        sb.DrawString(_smallFont, "[↑↓] Navigate   [Enter] Unlock   [Esc] Back",
+        sb.DrawString(_smallFont, "[Up/Down] Navigate   [Enter] Unlock   [Esc] Back",
             new Vector2(20, 65), Color.DimGray);
 
         DrawNodeList(sb);
@@ -128,7 +128,7 @@ public class UpgradeTreeScreen : GameScreen
                     : Color.DimGray;
 
             string prefix = selected ? ">" : " ";
-            string status = unlocked ? "[✓]" : available ? "[ ]" : "[🔒]";
+            string status = unlocked ? "[O]" : available ? "[ ]" : "[X]";
             string label  = $"{prefix} {status} {node.Name}  (cost:{node.Cost}pt, pwr:{node.PowerRatingValue})";
 
             sb.DrawString(_smallFont, label, new Vector2(x + 8, y), c);

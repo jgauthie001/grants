@@ -36,10 +36,10 @@ public class CardPair
         Unique?.BaseRange ?? Special?.BaseRange ?? Generic?.BaseRange ?? RangeBracket.Adjacent;
 
     /// <summary>All keywords from both cards combined.</summary>
-    public IEnumerable<CardKeyword> AllKeywords =>
-        (Generic?.Keywords ?? Enumerable.Empty<CardKeyword>())
-        .Concat(Unique?.Keywords ?? Enumerable.Empty<CardKeyword>())
-        .Concat(Special?.Keywords ?? Enumerable.Empty<CardKeyword>());
+    public IEnumerable<CardKeywordValue> AllKeywords =>
+        (Generic?.Keywords ?? Enumerable.Empty<CardKeywordValue>())
+        .Concat(Unique?.Keywords ?? Enumerable.Empty<CardKeywordValue>())
+        .Concat(Special?.Keywords ?? Enumerable.Empty<CardKeywordValue>());
 
     public bool IsValid => Generic != null || (Special != null && Special.Standalone);
 }

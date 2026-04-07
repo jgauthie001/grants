@@ -50,7 +50,7 @@ public class ProfileScreen : GameScreen
 
         sb.DrawString(_font, "Profile_pl", new Vector2(20, 15), Color.White);
         sb.DrawString(_smallFont, $"ID: {profile.PlayerId}   Rating: {profile.MatchmakingRating}", new Vector2(20, 45), Color.LightGray);
-        sb.DrawString(_smallFont, "[↑↓] Scroll history   [Esc] Back", new Vector2(20, 65), Color.DimGray);
+        sb.DrawString(_smallFont, "[Up/Down] Scroll history   [Esc] Back", new Vector2(20, 65), Color.DimGray);
 
         // Per-fighter stats
         int y = 95;
@@ -59,7 +59,7 @@ public class ProfileScreen : GameScreen
 
         foreach (var (fighterId, progress) in profile.FighterProgress)
         {
-            string ranked = progress.IsRankedUnlocked ? " [Ranked ✓]" : "";
+            string ranked = progress.IsRankedUnlocked ? " [Ranked OK]" : "";
             string line = $"  {fighterId}{ranked}  Wins:{progress.TotalWins} (PvE:{progress.PveWins} Casual:{progress.PvpCasualWins})  " +
                           $"Pts:{progress.AvailablePoints}  Power:{progress.PowerRating}  Nodes:{progress.UnlockedNodes.Count}";
             sb.DrawString(_smallFont, line, new Vector2(20, y), Color.LightCyan);

@@ -41,7 +41,7 @@ public static class AttackEngine
         // --- Range check ---
         int requiredRange = (int)attackerPair.EffectiveRange;
         // Lunge keyword: +1 range
-        if (attackerPair.AllKeywords.Contains(CardKeyword.Lunge))
+        if (attackerPair.AllKeywords.ContainsKeyword(CardKeyword.Lunge))
             requiredRange++;
 
         result.InRange = currentDistance <= requiredRange;
@@ -68,14 +68,14 @@ public static class AttackEngine
         var atkKeywords = attackerPair.AllKeywords.ToList();
 
         // ArmorBreak: reduce defender defense by 1
-        if (atkKeywords.Contains(CardKeyword.ArmorBreak))
+        if (atkKeywords.ContainsKeyword(CardKeyword.ArmorBreak))
         {
             defenderDefense = Math.Max(0, defenderDefense - 1);
             result.TriggeredKeywords.Add(CardKeyword.ArmorBreak);
         }
 
         // Piercing: ignore half defender defense
-        if (atkKeywords.Contains(CardKeyword.Piercing))
+        if (atkKeywords.ContainsKeyword(CardKeyword.Piercing))
         {
             defenderDefense = defenderDefense / 2;
             result.TriggeredKeywords.Add(CardKeyword.Piercing);
@@ -83,7 +83,7 @@ public static class AttackEngine
 
         // Guard keyword on defender: +2 defense
         var defKeywords = defenderPair.AllKeywords.ToList();
-        if (defKeywords.Contains(CardKeyword.Guard))
+        if (defKeywords.ContainsKeyword(CardKeyword.Guard))
         {
             defenderDefense += 2;
             result.TriggeredKeywords.Add(CardKeyword.Guard);
@@ -106,7 +106,7 @@ public static class AttackEngine
         result.NetDamageSteps = Math.Max(1, net / 2);
 
         // Crushing keyword: +1 damage step
-        if (atkKeywords.Contains(CardKeyword.Crushing))
+        if (atkKeywords.ContainsKeyword(CardKeyword.Crushing))
         {
             result.NetDamageSteps++;
             result.TriggeredKeywords.Add(CardKeyword.Crushing);
@@ -117,21 +117,21 @@ public static class AttackEngine
             $"for {result.NetDamageSteps} damage step(s). (power={attackerPower}, def={defenderDefense})");
 
         // --- Apply keywords that modify target ---
-        if (atkKeywords.Contains(CardKeyword.Bleed))
+        if (atkKeywords.ContainsKeyword(CardKeyword.Bleed))
         {
             defender.LocationStates[result.TargetLocation].BleedStacks++;
             result.TriggeredKeywords.Add(CardKeyword.Bleed);
             round.Log.Add($"  {defender.DisplayName}'s {result.TargetLocation} is now bleeding!");
         }
 
-        if (atkKeywords.Contains(CardKeyword.Stagger))
+        if (atkKeywords.ContainsKeyword(CardKeyword.Stagger))
         {
             defender.StaggerTurnsRemaining = 1;
             result.TriggeredKeywords.Add(CardKeyword.Stagger);
             round.Log.Add($"  {defender.DisplayName} is staggered — cooldowns +1 next turn.");
         }
 
-        if (atkKeywords.Contains(CardKeyword.Knockback))
+        if (atkKeywords.ContainsKeyword(CardKeyword.Knockback))
         {
             result.TriggeredKeywords.Add(CardKeyword.Knockback);
             round.Log.Add($"  {defender.DisplayName} is knocked back 1 hex.");

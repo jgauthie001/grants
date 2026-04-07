@@ -1,4 +1,5 @@
 using Grants.Models.Cards;
+using Grants.Models.Upgrades;
 
 namespace Grants.Models.Fighter;
 
@@ -35,6 +36,9 @@ public class FighterDefinition
 
     /// <summary>Wins required to unlock ranked PvP with this fighter.</summary>
     public int RankedUnlockWins { get; init; } = 15;
+
+    /// <summary>Available upgrade options per card (cardId -> list of 2 upgrades).</summary>
+    public Dictionary<string, List<CardUpgradeOption>> CardUpgradeOptions { get; init; } = new();
 
     public IEnumerable<CardBase> AllCards =>
         GenericCards.Cast<CardBase>().Concat(UniqueCards).Concat(SpecialCards);

@@ -70,8 +70,8 @@ public static class UpgradeEngine
             case CardUpgradeType.AddKeyword:
                 if (!instance.UpgradedCardKeywords.TryGetValue(cid, out var kws))
                     instance.UpgradedCardKeywords[cid] = kws = new();
-                if (!kws.Contains(effect.KeywordAdded))
-                    kws.Add(effect.KeywordAdded);
+                if (!kws.ContainsKeyword(effect.KeywordAdded))
+                    kws.Add(new CardKeywordValue(effect.KeywordAdded));
                 break;
         }
     }

@@ -92,7 +92,7 @@ public class FighterSelectScreen : GameScreen
             sb.DrawString(_smallFont, f.Description, new Vector2(200, 185 + i * 60), Color.Gray);
         }
 
-        string footer = "[↑↓] Navigate   [Enter] Select   [Esc] Back";
+        string footer = "[Up/Down] Navigate   [Enter] Select   [Esc] Back";
         sb.DrawString(_smallFont, footer,
             new Vector2(cx - _smallFont.MeasureString(footer).X / 2,
                 Game.GraphicsDevice.Viewport.Height - 30), Color.DimGray);

@@ -30,6 +30,9 @@ public class FighterProgress
     // Ranked eligibility
     public bool IsRankedUnlocked => TotalWins >= 15;
 
+    // Elo rating (for ranked PvP)
+    public double EloRating { get; set; } = 1200.0;
+
     /// <summary>
     /// Calculates upgrade points earned for a given win count.
     /// Front-loaded: more points per win early on.
@@ -54,6 +57,22 @@ public class FighterProgress
 
         int eligibleWins = PveWins + PvpCasualWins;
         UpgradePoints = CalculateTotalUpgradePoints(eligibleWins);
+    }
+
+    /// <summary>Update Elo rating after a ranked match. Called with opponent's Elo and whether player won.</summary>
+    public void UpdateEloRating(double opponentElo, bool won)
+    {
+        const double K_FACTOR = 32.0; // Standard K-factor for Elo calculation
+        
+        // Expected win probability
+        double expectedScore = 1.0 / (1.0 + Math.Pow(10.0, (opponentElo - EloRating) / 400.0));
+        
+        // Actual score (1.0 for win, 0.0 for loss)
+        double actualScore = won ? 1.0 : 0.0;
+        
+        // Calculate new Elo
+        double eloChange = K_FACTOR * (actualScore - expectedScore);
+        EloRating = Math.Max(1000.0, EloRating + eloChange);
     }
 
     public bool TryUnlockNode(UpgradeNode node)

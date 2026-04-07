@@ -11,6 +11,7 @@ public enum ScreenType
     PostMatch,
     UpgradeTree,
     Profile,
+    CharacterBuilder,
 }
 
 /// <summary>

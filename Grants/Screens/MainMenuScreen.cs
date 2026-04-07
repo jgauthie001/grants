@@ -13,7 +13,7 @@ public class MainMenuScreen : GameScreen
     private SpriteFont _smallFont = null!;
     private Texture2D _pixel = null!;
 
-    private string[] _menuItems = { "Play (PvE)_pl", "PvP Casual_pl", "PvP Ranked_pl", "Profile_pl", "Exit_pl" };
+    private string[] _menuItems = { "Play (PvE)_pl", "PvP Casual_pl", "PvP Ranked_pl", "Character Builder_pl", "Profile_pl", "Exit_pl" };
     private int _selectedIndex = 0;
     private KeyboardState _prevKeys;
 
@@ -50,8 +50,9 @@ public class MainMenuScreen : GameScreen
             case 0: SwitchTo(ScreenType.FighterSelect, "pve"); break;
             case 1: SwitchTo(ScreenType.FighterSelect, "pvp_casual"); break;
             case 2: SwitchTo(ScreenType.FighterSelect, "pvp_ranked"); break;
-            case 3: SwitchTo(ScreenType.Profile); break;
-            case 4: Game.Exit(); break;
+            case 3: SwitchTo(ScreenType.CharacterBuilder); break;
+            case 4: SwitchTo(ScreenType.Profile); break;
+            case 5: Game.Exit(); break;
         }
     }
 
@@ -83,7 +84,7 @@ public class MainMenuScreen : GameScreen
         }
 
         // Footer
-        string footer = "[↑↓] Navigate   [Enter] Select   [Esc] Quit";
+        string footer = "[Up/Down] Navigate   [Enter] Select   [Esc] Quit";
         var footerSize = _smallFont.MeasureString(footer);
         sb.DrawString(_smallFont, footer,
             new Vector2(cx - footerSize.X / 2, Game.GraphicsDevice.Viewport.Height - 30),

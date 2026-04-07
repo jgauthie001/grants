@@ -1,6 +1,7 @@
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Input;
+using System.Linq;
 using Grants.Engine;
 using Grants.Fighters.Grants;
 using Grants.Models.Cards;
@@ -23,10 +24,15 @@ public class FightScreen : GameScreen
     private MatchState _match = null!;
     private string _matchType = "pve";
 
-    // Card selection state
-    private List<CardPair> _availablePairs = new();
-    private int _selectedPairIndex = 0;
+    // Card selection state - two step: select generic first, then unique
     private bool _playerCommitted = false;
+    
+    // Two-step selection state
+    private GenericCard? _selectedGeneric = null;
+    private List<GenericCard> _validGenerics = new();
+    private int _genericSelectionIndex = 0;
+    private List<CardBase> _validUniques = new();  // Unique or Special cards
+    private int _uniqueSelectionIndex = 0;
 
     // Round log for display
     private List<string> _roundLog = new();
@@ -80,58 +86,155 @@ public class FightScreen : GameScreen
 
     private void LoadAvailablePairs()
     {
-        _availablePairs = _match.FighterA.GetValidPairs();
-        _selectedPairIndex = Math.Min(_selectedPairIndex, Math.Max(0, _availablePairs.Count - 1));
+        // Reset two-step selection
+        _selectedGeneric = null;
+        var available = _match.FighterA.GetAvailableGenerics();
+        _validGenerics = available;
+        _genericSelectionIndex = 0;
+        _uniqueSelectionIndex = 0;
+        _validUniques.Clear();
         _playerCommitted = false;
     }
 
     public override void Update(GameTime gameTime)
     {
-        if (_match.IsOver) return;
-
-        var keys = Keyboard.GetState();
-
-        if (_match.Phase == MatchPhase.CardSelection && !_playerCommitted)
+        try
         {
-            if (IsPressed(keys, _prevKeys, Keys.Up) || IsPressed(keys, _prevKeys, Keys.W))
-                _selectedPairIndex = (_selectedPairIndex - 1 + _availablePairs.Count) % _availablePairs.Count;
+            if (_match.IsOver) return;
 
-            if (IsPressed(keys, _prevKeys, Keys.Down) || IsPressed(keys, _prevKeys, Keys.S))
-                _selectedPairIndex = (_selectedPairIndex + 1) % _availablePairs.Count;
+            var keys = Keyboard.GetState();
 
-            if (IsPressed(keys, _prevKeys, Keys.Enter))
-                CommitPlayerChoice();
-        }
-        else if (_match.Phase == MatchPhase.RoundResult)
-        {
-            if (IsPressed(keys, _prevKeys, Keys.Enter) || IsPressed(keys, _prevKeys, Keys.Space))
+            if (_match.Phase == MatchPhase.CardSelection && !_playerCommitted)
             {
-                _match.Phase = MatchPhase.CardSelection;
-                LoadAvailablePairs();
+                if (_selectedGeneric == null)
+                {
+                    // Step 1: Select generic card
+                    if (IsPressed(keys, _prevKeys, Keys.Up) || IsPressed(keys, _prevKeys, Keys.W))
+                        _genericSelectionIndex = (_genericSelectionIndex - 1 + _validGenerics.Count) % _validGenerics.Count;
+
+                    if (IsPressed(keys, _prevKeys, Keys.Down) || IsPressed(keys, _prevKeys, Keys.S))
+                        _genericSelectionIndex = (_genericSelectionIndex + 1) % _validGenerics.Count;
+
+                    if (IsPressed(keys, _prevKeys, Keys.Enter))
+                    {
+                        if (_validGenerics.Count > 0)
+                        {
+                            _selectedGeneric = _validGenerics[_genericSelectionIndex];
+                            // Populate valid uniques for this generic
+                            var uniques = _match.FighterA.GetAvailableUniques()
+                                .Where(u => _match.FighterA.CanPair(_selectedGeneric, u))
+                                .Cast<CardBase>()
+                                .ToList();
+                            // Add available standalone specials
+                            uniques.AddRange(_match.FighterA.GetAvailableSpecials()
+                                .Where(s => s.Standalone)
+                                .Cast<CardBase>());
+                            _validUniques = uniques;
+                            _uniqueSelectionIndex = 0;
+                        }
+                    }
+                }
+                else
+                {
+                    // Step 2: Select unique/special card
+                    if (IsPressed(keys, _prevKeys, Keys.Up) || IsPressed(keys, _prevKeys, Keys.W))
+                        _uniqueSelectionIndex = (_uniqueSelectionIndex - 1 + _validUniques.Count) % _validUniques.Count;
+
+                    if (IsPressed(keys, _prevKeys, Keys.Down) || IsPressed(keys, _prevKeys, Keys.S))
+                        _uniqueSelectionIndex = (_uniqueSelectionIndex + 1) % _validUniques.Count;
+
+                    if (IsPressed(keys, _prevKeys, Keys.Enter))
+                    {
+                        CommitPlayerChoice();
+                    }
+                    
+                    if (IsPressed(keys, _prevKeys, Keys.Back))
+                    {
+                        _selectedGeneric = null;
+                        _validUniques.Clear();
+                    }
+                }
             }
+            else if (_match.Phase == MatchPhase.RoundResult)
+            {
+                if (IsPressed(keys, _prevKeys, Keys.Enter) || IsPressed(keys, _prevKeys, Keys.Space))
+                {
+                    _match.Phase = MatchPhase.CardSelection;
+                    LoadAvailablePairs();
+                }
+            }
+            else if (_match.Phase == MatchPhase.MatchOver)
+            {
+                if (IsPressed(keys, _prevKeys, Keys.Enter))
+                    HandleMatchEnd();
+            }
+
+            if (IsPressed(keys, _prevKeys, Keys.Escape))
+                SwitchTo(ScreenType.MainMenu);
+
+            _prevKeys = keys;
         }
-        else if (_match.Phase == MatchPhase.MatchOver)
+        catch (Exception ex)
         {
-            if (IsPressed(keys, _prevKeys, Keys.Enter))
-                HandleMatchEnd();
+            var logPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "game_debug.log");
+            using (var writer = new StreamWriter(logPath, append: true))
+            {
+                writer.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] UPDATE ERROR: {ex.Message}");
+                writer.WriteLine(ex.StackTrace);
+                writer.Flush();
+            }
+            throw;
         }
-
-        if (IsPressed(keys, _prevKeys, Keys.Escape))
-            SwitchTo(ScreenType.MainMenu);
-
-        _prevKeys = keys;
     }
 
     private void CommitPlayerChoice()
     {
-        if (_availablePairs.Count == 0) return;
+        if (_selectedGeneric == null || _validUniques.Count == 0) return;
 
-        _match.SelectedPairA = _availablePairs[_selectedPairIndex];
+        var logPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "game_debug.log");
+        using (var writer = new StreamWriter(logPath, append: true))
+        {
+            writer.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] CommitPlayerChoice: selecting move");
+            writer.Flush();
+        }
+
+        var unique = _validUniques[_uniqueSelectionIndex];
+        var pair = new CardPair
+        {
+            Generic = _selectedGeneric,
+            Unique = unique as UniqueCard,
+            Special = unique as SpecialCard,
+        };
+
+        _match.SelectedPairA = pair;
+        
+        using (var writer = new StreamWriter(logPath, append: true))
+        {
+            writer.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Getting AI selection");
+            writer.Flush();
+        }
+        
         _match.SelectedPairB = AiEngine.SelectPair(_match.FighterB, _match.FighterA, _match.Board);
         _playerCommitted = true;
 
+        using (var writer = new StreamWriter(logPath, append: true))
+        {
+            writer.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Resolving round");
+            writer.Flush();
+        }
+        
         var round = ResolutionEngine.ResolveRound(_match);
         _roundLog = round.Log;
+        
+        using (var writer = new StreamWriter(logPath, append: true))
+        {
+            writer.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Round resolved, phase={_match.Phase}");
+            writer.Flush();
+        }
+        
+        // Reset selection for next round
+        _selectedGeneric = null;
+        _validUniques.Clear();
     }
 
     private void HandleMatchEnd()
@@ -150,17 +253,31 @@ public class FightScreen : GameScreen
 
     public override void Draw(GameTime gameTime, SpriteBatch sb)
     {
-        sb.Begin();
+        try
+        {
+            sb.Begin();
 
-        DrawBoard(sb);
-        DrawDamageStates(sb);
-        DrawCardSelection(sb);
-        DrawRoundLog(sb);
+            DrawBoard(sb);
+            DrawDamageStates(sb);
+            DrawCardSelection(sb);
+            DrawRoundLog(sb);
 
-        if (_match.Phase == MatchPhase.MatchOver)
-            DrawMatchOver(sb);
+            if (_match.Phase == MatchPhase.MatchOver)
+                DrawMatchOver(sb);
 
-        sb.End();
+            sb.End();
+        }
+        catch (Exception ex)
+        {
+            var logPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "game_debug.log");
+            using (var writer = new StreamWriter(logPath, append: true))
+            {
+                writer.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] DRAW ERROR: {ex.Message}");
+                writer.WriteLine(ex.StackTrace);
+                writer.Flush();
+            }
+            throw;
+        }
     }
 
     private void DrawBoard(SpriteBatch sb)
@@ -217,36 +334,88 @@ public class FightScreen : GameScreen
         if (_match.Phase != MatchPhase.CardSelection || _playerCommitted) return;
 
         int panelX = 20, panelY = 200;
-        sb.DrawString(_font, "Select your move:_pl", new Vector2(panelX, panelY), Color.White);
 
-        for (int i = 0; i < _availablePairs.Count; i++)
+        if (_selectedGeneric == null)
         {
-            var pair = _availablePairs[i];
-            bool sel = i == _selectedPairIndex;
-            Color c = sel ? Color.Yellow : Color.LightGray;
+            // Step 1: Select Generic Card
+            sb.DrawString(_font, "Select Generic Card:_pl", new Vector2(panelX, panelY), Color.White);
 
-            string genName = pair.Generic?.Name ?? "(standalone)";
-            string moveName = pair.Unique?.Name ?? pair.Special?.Name ?? "?";
-            string label = $"{(sel ? ">" : " ")} {genName} + {moveName}  [Spd:{pair.CombinedSpeed:+#;-#;0} Pwr:{pair.CombinedPower} Def:{pair.CombinedDefense} Mov:{pair.CombinedMovement}]";
-            sb.DrawString(_smallFont, label, new Vector2(panelX, panelY + 24 + i * 18), c);
+            for (int i = 0; i < _validGenerics.Count; i++)
+            {
+                var card = _validGenerics[i];
+                bool sel = i == _genericSelectionIndex;
+                Color c = sel ? Color.Yellow : Color.LightGray;
+                string label = $"{(sel ? ">" : " ")} {card.Name}  [Spd:{card.BaseSpeed:+#;-#;0} Pwr:{card.BasePower} Def:{card.BaseDefense}]";
+                sb.DrawString(_smallFont, label, new Vector2(panelX, panelY + 24 + i * 18), c);
+            }
+
+            sb.DrawString(_smallFont, "[Up/Down] Navigate   [Enter] Select",
+                new Vector2(panelX, panelY + 24 + _validGenerics.Count * 18 + 8), Color.DimGray);
         }
+        else
+        {
+            // Step 2: Select Unique/Special Card
+            sb.DrawString(_font, $"Select Combo for: {_selectedGeneric.Name}", new Vector2(panelX, panelY), Color.Yellow);
 
-        sb.DrawString(_smallFont, "[↑↓] Navigate   [Enter] Commit",
-            new Vector2(panelX, panelY + 24 + _availablePairs.Count * 18 + 8), Color.DimGray);
+            if (_validUniques.Count == 0)
+            {
+                sb.DrawString(_smallFont, "No compatible moves available", new Vector2(panelX, panelY + 30), Color.Red);
+                sb.DrawString(_smallFont, "[Esc] Go back", new Vector2(panelX, panelY + 50), Color.DimGray);
+                return;
+            }
+
+            for (int i = 0; i < _validUniques.Count; i++)
+            {
+                var card = _validUniques[i];
+                bool sel = i == _uniqueSelectionIndex;
+                Color c = sel ? Color.Yellow : Color.LightGray;
+                string cardName = card switch
+                {
+                    UniqueCard u => u.Name,
+                    SpecialCard s => s.Name,
+                    _ => "?"
+                };
+                string label = $"{(sel ? ">" : " ")} {cardName}  [Spd:{card.BaseSpeed:+#;-#;0} Pwr:{card.BasePower} Def:{card.BaseDefense}]";
+                sb.DrawString(_smallFont, label, new Vector2(panelX, panelY + 24 + i * 18), c);
+            }
+
+            sb.DrawString(_smallFont, "[Up/Down] Navigate   [Enter] Commit   [Backspace] Back",
+                new Vector2(panelX, panelY + 24 + _validUniques.Count * 18 + 8), Color.DimGray);
+        }
     }
 
     private void DrawRoundLog(SpriteBatch sb)
     {
         if (_roundLog.Count == 0) return;
 
-        int logX = 20, logY = 560;
-        sb.DrawString(_smallFont, "Round Log:_pl", new Vector2(logX, logY), Color.White);
-        for (int i = 0; i < Math.Min(_roundLog.Count, 10); i++)
-            sb.DrawString(_smallFont, _roundLog[i], new Vector2(logX, logY + 16 + i * 14), Color.LightGray);
+        try
+        {
+            int logX = 20, logY = 560;
+            sb.DrawString(_smallFont, "Round Log:_pl", new Vector2(logX, logY), Color.White);
+            for (int i = 0; i < Math.Min(_roundLog.Count, 10); i++)
+            {
+                string logEntry = _roundLog[i];
+                // Filter to ASCII-only characters that the font supports
+                var filtered = new System.Text.StringBuilder();
+                foreach (char c in logEntry)
+                {
+                    if (c >= 32 && c <= 126)  // Printable ASCII range
+                        filtered.Append(c);
+                    else if (c == '\n' || c == '\t')
+                        filtered.Append(' ');  // Replace whitespace with space
+                }
+                string safeText = filtered.ToString();
+                sb.DrawString(_smallFont, safeText, new Vector2(logX, logY + 16 + i * 14), Color.LightGray);
+            }
 
-        if (_match.Phase == MatchPhase.RoundResult)
-            sb.DrawString(_smallFont, "[Enter/Space] Next Round",
-                new Vector2(logX, logY + 16 + Math.Min(_roundLog.Count, 10) * 14), Color.DimGray);
+            if (_match.Phase == MatchPhase.RoundResult)
+                sb.DrawString(_smallFont, "[Enter/Space] Next Round",
+                    new Vector2(logX, logY + 16 + Math.Min(_roundLog.Count, 10) * 14), Color.DimGray);
+        }
+        catch
+        {
+            // If anything goes wrong, just skip the round log display
+        }
     }
 
     private void DrawMatchOver(SpriteBatch sb)
