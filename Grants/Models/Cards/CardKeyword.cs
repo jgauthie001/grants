@@ -32,4 +32,7 @@ public enum CardKeyword
     Sidestep,       // Allows diagonal movement regardless of standard move rules
     Press,          // After landing hit: may move 1 hex toward opponent as free action
     Retreat,        // Movement cannot be prevented this turn
+
+    // Debug/Testing
+    Kill,           // Instantly disables all opponent body parts (TEST ONLY)
 }

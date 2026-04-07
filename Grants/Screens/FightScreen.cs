@@ -7,6 +7,7 @@ using Grants.Fighters.Grants;
 using Grants.Models.Cards;
 using Grants.Models.Fighter;
 using Grants.Models.Match;
+using Grants.UI;
 using MatchType = Grants.Models.Match.MatchType;
 
 namespace Grants.Screens;
@@ -37,6 +38,12 @@ public class FightScreen : GameScreen
     // Round log for display
     private List<string> _roundLog = new();
     private KeyboardState _prevKeys;
+    private MouseState _prevMouse;
+
+    // Tooltip tracking
+    private CardBase? _hoveredCard = null;
+    private float _hoverTime = 0f;
+    private const float HoverDelay = 0.5f;  // Delay before tooltip appears
 
     private const float HexSize = 36f;
     private const float BoardOriginX = 640f;
@@ -103,6 +110,10 @@ public class FightScreen : GameScreen
             if (_match.IsOver) return;
 
             var keys = Keyboard.GetState();
+            var mouse = Mouse.GetState();
+
+            // Update hover detection
+            UpdateCardHover(mouse, gameTime);
 
             if (_match.Phase == MatchPhase.CardSelection && !_playerCommitted)
             {
@@ -173,6 +184,7 @@ public class FightScreen : GameScreen
                 SwitchTo(ScreenType.MainMenu);
 
             _prevKeys = keys;
+            _prevMouse = mouse;
         }
         catch (Exception ex)
         {
@@ -264,6 +276,10 @@ public class FightScreen : GameScreen
 
             if (_match.Phase == MatchPhase.MatchOver)
                 DrawMatchOver(sb);
+
+            // Draw tooltip last (on top)
+            if (_hoverTime >= HoverDelay && _hoveredCard != null)
+                DrawCardTooltip(sb, Mouse.GetState());
 
             sb.End();
         }
@@ -440,4 +456,123 @@ public class FightScreen : GameScreen
 
     private static bool IsPressed(KeyboardState cur, KeyboardState prev, Keys key) =>
         cur.IsKeyDown(key) && prev.IsKeyUp(key);
+
+    private void UpdateCardHover(MouseState mouse, GameTime gameTime)
+    {
+        if (_match.Phase != MatchPhase.CardSelection || _playerCommitted)
+        {
+            _hoveredCard = null;
+            _hoverTime = 0f;
+            return;
+        }
+
+        CardBase? cardUnderMouse = null;
+
+        // Check generic cards (if in step 1)
+        if (_selectedGeneric == null)
+        {
+            const int panelX = 20, panelY = 200 + 24;
+            const int lineHeight = 18;
+            int cardY = panelY;
+
+            for (int i = 0; i < _validGenerics.Count; i++)
+            {
+                var rect = new Rectangle(panelX, cardY + i * lineHeight, 400, lineHeight - 2);
+                if (rect.Contains(mouse.Position))
+                {
+                    cardUnderMouse = _validGenerics[i];
+                    break;
+                }
+            }
+        }
+        // Check unique/special cards (if in step 2)
+        else if (_selectedGeneric != null && _validUniques.Count > 0)
+        {
+            const int panelX = 20, panelY = 200 + 24;
+            const int lineHeight = 18;
+            int cardY = panelY;
+
+            for (int i = 0; i < _validUniques.Count; i++)
+            {
+                var rect = new Rectangle(panelX, cardY + i * lineHeight, 400, lineHeight - 2);
+                if (rect.Contains(mouse.Position))
+                {
+                    cardUnderMouse = _validUniques[i];
+                    break;
+                }
+            }
+        }
+
+        // Update hover state
+        if (cardUnderMouse == _hoveredCard)
+        {
+            // Still hovering same card
+            _hoverTime += (float)gameTime.ElapsedGameTime.TotalSeconds;
+        }
+        else
+        {
+            // New card or no card
+            _hoveredCard = cardUnderMouse;
+            _hoverTime = 0f;
+        }
+    }
+
+    private void DrawCardTooltip(SpriteBatch sb, MouseState mouse)
+    {
+        if (_hoveredCard == null) return;
+
+        var tooltipLines = CardTooltip.GetCardTooltip(_hoveredCard);
+        const int padding = 8;
+        const int lineHeight = 14;
+        int maxWidth = tooltipLines.Max(line => line.Length) * 8;  // ~8 pixels per char
+        int tooltipWidth = maxWidth + padding * 2;
+        int tooltipHeight = tooltipLines.Count * lineHeight + padding * 2;
+
+        // Position tooltip near mouse, but keep it on screen
+        int tooltipX = mouse.X + 15;
+        int tooltipY = mouse.Y + 15;
+
+        int screenWidth = Game.GraphicsDevice.Viewport.Width;
+        int screenHeight = Game.GraphicsDevice.Viewport.Height;
+
+        if (tooltipX + tooltipWidth > screenWidth)
+            tooltipX = screenWidth - tooltipWidth - 5;
+        if (tooltipY + tooltipHeight > screenHeight)
+            tooltipY = screenHeight - tooltipHeight - 5;
+
+        // Draw background
+        sb.Draw(_pixel, new Rectangle(tooltipX, tooltipY, tooltipWidth, tooltipHeight), Color.Black * 0.85f);
+        // Draw border
+        DrawRect(sb, tooltipX - 1, tooltipY - 1, tooltipWidth + 2, tooltipHeight + 2, Color.Gold);
+
+        // Draw text
+        int textY = tooltipY + padding;
+        foreach (var line in tooltipLines)
+        {
+            Color lineColor = Color.White;
+            // Highlight keywords
+            if (line.Contains(":")
+                && (line.Contains("Bleed") || line.Contains("Break") || line.Contains("Piercing")
+                    || line.Contains("Crushing") || line.Contains("Feint") || line.Contains("Quickstep")
+                    || line.Contains("Lunge") || line.Contains("Stagger") || line.Contains("Disrupt")
+                    || line.Contains("Knockback") || line.Contains("Guard") || line.Contains("Parry")
+                    || line.Contains("Deflect") || line.Contains("Sidestep") || line.Contains("Press")
+                    || line.Contains("Retreat") || line.Contains("Kill")))
+            {
+                lineColor = Color.LimeGreen;
+            }
+
+            sb.DrawString(_smallFont, line, new Vector2(tooltipX + padding, textY), lineColor);
+            textY += lineHeight;
+        }
+    }
+
+    private void DrawRect(SpriteBatch sb, int x, int y, int width, int height, Color color)
+    {
+        // Draw border using pixel lines
+        sb.Draw(_pixel, new Rectangle(x, y, width, 1), color);          // Top
+        sb.Draw(_pixel, new Rectangle(x, y + height - 1, width, 1), color);  // Bottom
+        sb.Draw(_pixel, new Rectangle(x, y, 1, height), color);         // Left
+        sb.Draw(_pixel, new Rectangle(x + width - 1, y, 1, height), color);  // Right
+    }
 }

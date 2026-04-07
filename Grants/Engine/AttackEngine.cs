@@ -137,6 +137,17 @@ public static class AttackEngine
             round.Log.Add($"  {defender.DisplayName} is knocked back 1 hex.");
         }
 
+        // Kill keyword: instantly disable all body parts (TEST ONLY)
+        if (atkKeywords.ContainsKeyword(CardKeyword.Kill))
+        {
+            foreach (var loc in defender.LocationStates.Values)
+            {
+                loc.State = DamageState.Disabled;
+            }
+            result.TriggeredKeywords.Add(CardKeyword.Kill);
+            round.Log.Add($"  *** {defender.DisplayName} is DEFEATED by Kill keyword! ***");
+        }
+
         // --- Apply damage ---
         defender.LocationStates[result.TargetLocation].ApplyDamage(result.NetDamageSteps);
 

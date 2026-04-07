@@ -291,6 +291,22 @@ public static class GrantsFighter
         Standalone = true,
     };
 
+    // TEST CARD — Kill keyword for instant testing
+    public static readonly SpecialCard S_KillTest = new()
+    {
+        Id = "grants_s_killtest",
+        Name = "[TEST] Kill",
+        Description = "Instantly defeats opponent. For testing only.",
+        Keywords = new() { new CardKeywordValue(CardKeyword.Kill) },
+        BasePower = 1,
+        BaseDefense = 0,
+        BaseSpeed = 0,
+        BaseMovement = 0,
+        BaseRange = RangeBracket.Adjacent,
+        BaseCooldown = 1,
+        Standalone = true,
+    };
+
     // ===== FIGHTER DEFINITION =====
     public static FighterDefinition CreateDefinition() => new()
     {
@@ -299,7 +315,7 @@ public static class GrantsFighter
         Description = "A hard-hitting brawler who thrives in close quarters. Rewards aggression and punishes hesitation._pl",
         GenericCards = new() { G_Head, G_Torso, G_LeftArm, G_RightArm, G_LeftLeg, G_RightLeg, G_Core, G_Stance },
         UniqueCards = new() { U_Haymaker, U_Clinch, U_CrossCounter, U_BullRush, U_LowSweep, U_Overhand, U_SideStep, U_BodyShot },
-        SpecialCards = new() { S_Obliterator, S_BerserkRush },
+        SpecialCards = new() { S_Obliterator, S_BerserkRush, S_KillTest },
         CriticalLocations = new() { Models.Fighter.BodyLocation.Head, Models.Fighter.BodyLocation.Torso },
         KOThreshold = 2,
         RankedUnlockWins = 15,
