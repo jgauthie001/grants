@@ -107,8 +107,6 @@ public class FightScreen : GameScreen
     {
         try
         {
-            if (_match.IsOver) return;
-
             var keys = Keyboard.GetState();
             var mouse = Mouse.GetState();
 
