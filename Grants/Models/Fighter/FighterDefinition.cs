@@ -37,6 +37,9 @@ public class FighterDefinition
     /// <summary>Wins required to unlock ranked PvP with this fighter.</summary>
     public int RankedUnlockWins { get; init; } = 15;
 
+    /// <summary>This fighter's persona — defines unique gameplay mechanics and AI behavior.</summary>
+    public FighterPersona Persona { get; init; } = StandardPersona.Instance;
+
     /// <summary>Available upgrade options per card (cardId -> list of 2 upgrades).</summary>
     public Dictionary<string, List<CardUpgradeOption>> CardUpgradeOptions { get; init; } = new();
 

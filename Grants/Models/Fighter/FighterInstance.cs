@@ -37,10 +37,14 @@ public class FighterInstance
     // --- Passive item effects (from upgrade tree items) ---
     public List<string> ActiveItemIds { get; set; } = new();
 
+    // --- Persona-specific runtime state ---
+    public PersonaState PersonaState { get; set; } = null!;
+
     public FighterInstance(FighterDefinition definition, string displayName = "")
     {
         Definition = definition;
         DisplayName = string.IsNullOrEmpty(displayName) ? definition.Name : displayName;
+        PersonaState = definition.Persona.CreateRuntimeState();
 
         foreach (BodyLocation loc in Enum.GetValues<BodyLocation>())
             LocationStates[loc] = new LocationState { Location = loc };
