@@ -250,14 +250,6 @@ public class FightScreen : GameScreen
     private void HandleMatchEnd()
     {
         bool won = _match.Winner == _match.FighterA;
-        var progress = Game.PlayerProfile.GetOrCreateProgress(_match.FighterA.Definition.Id);
-
-        if (won)
-            progress.RecordWin(
-                isPve: _match.MatchType == MatchType.PvE,
-                isCasualPvp: _match.MatchType == MatchType.PvpCasual);
-
-        UpgradeEngine.SaveProfile(Game.PlayerProfile);
         SwitchTo(ScreenType.PostMatch, (_match, won));
     }
 
@@ -319,11 +311,11 @@ public class FightScreen : GameScreen
 
     private void DrawDamageStates(SpriteBatch sb)
     {
-        DrawFighterHealth(sb, _match.FighterA, 20, 20);
-        DrawFighterHealth(sb, _match.FighterB, 820, 20);
+        DrawFighterHealth(sb, _match.FighterA, 20, 20, true);
+        DrawFighterHealth(sb, _match.FighterB, 820, 20, false);
     }
 
-    private void DrawFighterHealth(SpriteBatch sb, FighterInstance fighter, int x, int y)
+    private void DrawFighterHealth(SpriteBatch sb, FighterInstance fighter, int x, int y, bool isPlayer)
     {
         sb.DrawString(_font, fighter.DisplayName, new Vector2(x, y), Color.White);
         int row = 0;
@@ -340,6 +332,14 @@ public class FightScreen : GameScreen
             string label = $"{kvp.Key}: {kvp.Value.State}";
             sb.DrawString(_smallFont, label, new Vector2(x, y + 22 + row * 16), stateColor);
             row++;
+        }
+
+        // Display Elo for ranked matches (player only)
+        if (isPlayer && _match.MatchType == MatchType.PvpRanked)
+        {
+            var progress = Game.PlayerProfile.GetOrCreateProgress(fighter.Definition.Id);
+            string eloLabel = $"Elo: {progress.EloRating:F0}";
+            sb.DrawString(_smallFont, eloLabel, new Vector2(x, y + 22 + row * 16), Color.Cyan);
         }
     }
 

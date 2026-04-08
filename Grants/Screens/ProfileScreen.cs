@@ -61,7 +61,7 @@ public class ProfileScreen : GameScreen
         {
             string ranked = progress.IsRankedUnlocked ? " [Ranked OK]" : "";
             string line = $"  {fighterId}{ranked}  Wins:{progress.TotalWins} (PvE:{progress.PveWins} Casual:{progress.PvpCasualWins})  " +
-                          $"Pts:{progress.AvailablePoints}  Power:{progress.PowerRating}  Nodes:{progress.UnlockedNodes.Count}";
+                          $"Pts:{progress.AvailablePoints}  Power:{progress.PowerRating}  Elo:{progress.EloRating:F0}";
             sb.DrawString(_smallFont, line, new Vector2(20, y), Color.LightCyan);
             y += 16;
         }

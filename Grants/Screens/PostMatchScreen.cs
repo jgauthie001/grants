@@ -45,17 +45,33 @@ public class PostMatchScreen : GameScreen
         {
             // Calculate points earned in this match
             var progress = Game.PlayerProfile.GetOrCreateProgress(_fighterId);
+            double eloBeforeRanked = progress.EloRating;
             int pointsBefore = progress.AvailablePoints;
             
-            // Update win record
+            // Update win record and ranked rating if applicable
             if (_playerWon)
             {
                 bool isPve = _match.MatchType == MatchType.PvE;
                 bool isCasual = _match.MatchType == MatchType.PvpCasual;
+                bool isRanked = _match.MatchType == MatchType.PvpRanked;
                 progress.RecordWin(isPve, isCasual);
+                
+                // Update Elo if ranked match
+                if (isRanked)
+                {
+                    // Get opponent's Elo (CPU Grants has default 1200)
+                    double opponentElo = 1200.0;
+                    progress.UpdateEloRating(opponentElo, true);
+                }
+            }
+            else if (_match.MatchType == MatchType.PvpRanked)
+            {
+                // Lost ranked match - still update Elo
+                progress.UpdateEloRating(1200.0, false);
             }
             
             int pointsEarned = progress.AvailablePoints - pointsBefore;
+            double eloChangeRanked = progress.EloRating - eloBeforeRanked;
             SwitchTo(ScreenType.UpgradeSelection, (_fighterId, pointsEarned));
         }
 
@@ -96,6 +112,14 @@ public class PostMatchScreen : GameScreen
         string pts = $"Upgrade points available: {progress.AvailablePoints}  (Total wins: {progress.TotalWins})";
         var psz = _smallFont.MeasureString(pts);
         sb.DrawString(_smallFont, pts, new Vector2(cx - psz.X / 2, 170), Color.LightGreen);
+
+        // Elo rating (if ranked)
+        if (_match.MatchType == MatchType.PvpRanked)
+        {
+            string elo = $"Elo Rating: {progress.EloRating:F0}";
+            var esz = _smallFont.MeasureString(elo);
+            sb.DrawString(_smallFont, elo, new Vector2(cx - esz.X / 2, 190), Color.Cyan);
+        }
 
         // Round history summary
         sb.DrawString(_smallFont, "Round History:_pl", new Vector2(cx - 200, 220), Color.White);

@@ -71,8 +71,11 @@ public class UpgradeSelectionScreen : GameScreen
         if (IsPressed(keys, _prevKeys, Keys.Enter) && _availableNodeIds.Count > 0)
             TryUnlockSelected();
 
-        if (IsPressed(keys, _prevKeys, Keys.Escape))
+        if (IsPressed(keys, _prevKeys, Keys.D))
             ReturnToMenu();
+
+        if (IsPressed(keys, _prevKeys, Keys.Escape))
+            Game.Exit();
 
         _prevKeys = keys;
     }
@@ -180,7 +183,8 @@ public class UpgradeSelectionScreen : GameScreen
             _progress.AvailablePoints >= node.Cost ? Color.LimeGreen : Color.Red);
         dy += 20;
 
-        sb.DrawString(_smallFont, $"Branch: {node.Branch}", new Vector2(dx, dy), Color.LightGray);
+        string safeBranch = SanitizeText(node.Branch);
+        sb.DrawString(_smallFont, $"Branch: {safeBranch}", new Vector2(dx, dy), Color.LightGray);
         dy += 18;
 
         // Prerequisites
@@ -193,8 +197,9 @@ public class UpgradeSelectionScreen : GameScreen
 
         dy += 8;
 
-        // Description
-        var words = node.Description.Split(' ');
+        // Description - sanitize for font compatibility
+        string safeDescription = SanitizeText(node.Description);
+        var words = safeDescription.Split(' ');
         string line = "";
         foreach (var word in words)
         {
@@ -232,7 +237,7 @@ public class UpgradeSelectionScreen : GameScreen
     private void DrawFooter(SpriteBatch sb)
     {
         int vy = Game.GraphicsDevice.Viewport.Height;
-        string footer = "[Up/Down] Navigate | [Enter] Unlock | [Esc] Done";
+        string footer = "[Up/Down] Navigate | [Enter] Unlock | [D] Done | [Esc] Exit";
         var footerSize = _smallFont.MeasureString(footer);
         sb.DrawString(_smallFont, footer,
             new Vector2((Game.GraphicsDevice.Viewport.Width - (int)footerSize.X) / 2, vy - 30),
@@ -249,4 +254,22 @@ public class UpgradeSelectionScreen : GameScreen
 
     private static bool IsPressed(KeyboardState cur, KeyboardState prev, Keys key) =>
         cur.IsKeyDown(key) && prev.IsKeyUp(key);
+
+    private string SanitizeText(string text)
+    {
+        // Replace problematic Unicode characters with ASCII equivalents
+        var filtered = new System.Text.StringBuilder();
+        foreach (char c in text)
+        {
+            if (c >= 32 && c <= 126)  // Printable ASCII range
+                filtered.Append(c);
+            else if (c == '\n' || c == '\t')
+                filtered.Append(' ');  // Replace whitespace with space
+            else if (c == '–' || c == '—')  // Em-dash or en-dash
+                filtered.Append('-');
+            else if (c != '\0')  // Skip null characters but keep others if safe
+                filtered.Append('?');
+        }
+        return filtered.ToString();
+    }
 }
