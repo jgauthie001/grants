@@ -32,50 +32,52 @@ public class CardPair
         (Generic?.BaseMovement ?? 0) + (Unique?.BaseMovement ?? Special?.BaseMovement ?? 0);
 
     /// <summary>
-    /// Effective range of the attack portion of this action.
-    /// For normal pairs: UniqueCard.BaseRange + GenericCard.RangeModifier
-    /// For standalone specials: SpecialCard.BaseRange
+    /// Minimum range (in hexes) this pair can hit.
+    /// For normal pairs: Unique.MinRange + Generic.MinRangeModifier
+    /// For standalone specials: Special.MinRange
     /// 
-    /// Range values: Adjacent=1, Close=2, Mid=3, Far=4
-    /// Modifiers can shift range up/down (e.g., +1 for extended reach, -1 for short range).
-    /// Final range is clamped to valid brackets.
+    /// Example:
+    /// - Unique: MinRange=1, MaxRange=2
+    /// - Generic: MinModifier=0, MaxModifier=+1
+    /// - Result MinRange: 1 + 0 = 1
+    /// - Result MaxRange: 2 + 1 = 3
+    /// - Can hit 1, 2, or 3 hexes away
     /// </summary>
-    public int EffectiveRangeValue
+    public int EffectiveMinRange
     {
         get
         {
-            int baseRange = (Unique?.BaseRange ?? Special?.BaseRange ?? RangeBracket.Adjacent) switch
-            {
-                RangeBracket.Adjacent => 1,
-                RangeBracket.Close => 2,
-                RangeBracket.Mid => 3,
-                RangeBracket.Far => 4,
-                _ => 1
-            };
-
-            int modifier = Generic?.RangeModifier ?? 0;
-            int effectiveRange = baseRange + modifier;
-
-            // Clamp to valid range (minimum Adjacent=1, practical maximum Far=4 but allow higher)
-            return Math.Max(1, effectiveRange);
+            int baseMin = Unique?.MinRange ?? Special?.MinRange ?? 1;
+            int modifier = Generic?.MinRangeModifier ?? 0;
+            return Math.Max(1, baseMin + modifier);  // Minimum is 1 (can't hit 0 hexes away)
         }
     }
 
     /// <summary>
-    /// Effective range as a RangeBracket enum.
-    /// Used for display and legacy compatibility.
+    /// Maximum range (in hexes) this pair can hit.
+    /// For normal pairs: Unique.MaxRange + Generic.MaxRangeModifier
+    /// For standalone specials: Special.MaxRange
     /// </summary>
-    public RangeBracket EffectiveRange =>
-        EffectiveRangeValue switch
+    public int EffectiveMaxRange
+    {
+        get
         {
-            1 => RangeBracket.Adjacent,
-            2 => RangeBracket.Close,
-            3 => RangeBracket.Mid,
-            4 or _ => RangeBracket.Far  // 4+ all map to Far
-        };
+            int baseMax = Unique?.MaxRange ?? Special?.MaxRange ?? 1;
+            int modifier = Generic?.MaxRangeModifier ?? 0;
+            return Math.Max(1, baseMax + modifier);
+        }
+    }
 
-    /// <summary>Combined range for display. For UI showing range value.</summary>
-    public int CombinedRange => EffectiveRangeValue;
+    /// <summary>
+    /// Check if a distance falls within this pair's attack range.
+    /// </summary>
+    public bool IsInRange(int distance) =>
+        distance >= EffectiveMinRange && distance <= EffectiveMaxRange;
+
+    /// <summary>For display purposes: show range as a bracket string.</summary>
+    public string RangeDisplay => $"{EffectiveMinRange}-{EffectiveMaxRange}";
+
+    /// <summary>All keywords from both cards combined.</summary>
     public IEnumerable<CardKeywordValue> AllKeywords =>
         (Generic?.Keywords ?? Enumerable.Empty<CardKeywordValue>())
         .Concat(Unique?.Keywords ?? Enumerable.Empty<CardKeywordValue>())

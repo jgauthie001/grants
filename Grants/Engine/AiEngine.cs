@@ -28,7 +28,7 @@ public static class AiEngine
             throw new InvalidOperationException($"AI fighter {ai.DisplayName} has no valid card pairs.");
 
         // If out of range on all attack options, prefer a movement-heavy pair
-        bool anyInRange = validPairs.Any(p => distance <= (int)p.EffectiveRange);
+        bool anyInRange = validPairs.Any(p => p.IsInRange(distance));
         if (!anyInRange)
         {
             // Pick pair with most movement
@@ -37,7 +37,7 @@ public static class AiEngine
 
         // Among in-range pairs, pick highest power
         return validPairs
-            .Where(p => distance <= (int)p.EffectiveRange)
+            .Where(p => p.IsInRange(distance))
             .OrderByDescending(p => p.CombinedPower)
             .ThenByDescending(p => p.CombinedSpeed)
             .First();

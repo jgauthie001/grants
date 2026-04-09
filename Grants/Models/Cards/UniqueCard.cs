@@ -3,6 +3,10 @@ namespace Grants.Models.Cards;
 /// <summary>
 /// Unique card — a fighter's signature technique. Must be paired with a compatible generic card.
 /// Base cooldown: 2 turns.
+/// 
+/// Range System: Defines MIN and MAX hex distance for this attack.
+/// Example: MinRange=1, MaxRange=2 means "can hit 1 or 2 hexes away"
+/// When paired with a generic card, the generic provides range modifiers.
 /// </summary>
 public class UniqueCard : CardBase
 {
@@ -23,4 +27,14 @@ public class UniqueCard : CardBase
     /// e.g., a "Exploit Opening" move that only works if opponent's Torso is Bruised or worse.
     /// </summary>
     public string? RequiresOpponentCondition { get; init; }
+
+    /// <summary>
+    /// Minimum range in hexes. Attack can hit opponents at least this far away.
+    /// </summary>
+    public int MinRange { get; init; } = 1;
+
+    /// <summary>
+    /// Maximum range in hexes. Attack cannot hit opponents farther than this.
+    /// </summary>
+    public int MaxRange { get; init; } = 1;
 }

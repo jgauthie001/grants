@@ -28,7 +28,8 @@ public static class GrantsFighter
         BaseDefense = 1,
         BaseSpeed = 0,
         BaseMovement = 0,
-        RangeModifier = 0,
+        MinRangeModifier = 0,
+        MaxRangeModifier = 0,
         BaseCooldown = 1,
     };
 
@@ -43,7 +44,8 @@ public static class GrantsFighter
         BaseDefense = 2,
         BaseSpeed = -1,
         BaseMovement = 0,
-        RangeModifier = 0,
+        MinRangeModifier = 0,
+        MaxRangeModifier = 0,
         BaseCooldown = 1,
     };
 
@@ -58,7 +60,8 @@ public static class GrantsFighter
         BaseDefense = 1,
         BaseSpeed = 1,
         BaseMovement = 0,
-        RangeModifier = 0,
+        MinRangeModifier = 0,
+        MaxRangeModifier = 0,
         BaseCooldown = 1,
     };
 
@@ -73,7 +76,8 @@ public static class GrantsFighter
         BaseDefense = 1,
         BaseSpeed = 0,
         BaseMovement = 0,
-        RangeModifier = 0,
+        MinRangeModifier = 0,
+        MaxRangeModifier = 0,
         BaseCooldown = 1,
     };
 
@@ -88,7 +92,8 @@ public static class GrantsFighter
         BaseDefense = 1,
         BaseSpeed = 1,
         BaseMovement = 1,
-        RangeModifier = 0,
+        MinRangeModifier = 0,
+        MaxRangeModifier = 0,
         BaseCooldown = 1,
     };
 
@@ -103,7 +108,8 @@ public static class GrantsFighter
         BaseDefense = 1,
         BaseSpeed = 0,
         BaseMovement = 1,
-        RangeModifier = 0,
+        MinRangeModifier = 0,
+        MaxRangeModifier = 0,
         BaseCooldown = 1,
     };
 
@@ -118,7 +124,8 @@ public static class GrantsFighter
         BaseDefense = 2,
         BaseSpeed = -1,
         BaseMovement = 0,
-        RangeModifier = 0,
+        MinRangeModifier = 0,
+        MaxRangeModifier = 0,
         BaseCooldown = 1,
     };
 
@@ -133,7 +140,8 @@ public static class GrantsFighter
         BaseDefense = 2,
         BaseSpeed = 2,
         BaseMovement = 2,
-        RangeModifier = 1,
+        MinRangeModifier = 0,
+        MaxRangeModifier = 1,
         BaseCooldown = 1,
     };
 
@@ -150,7 +158,8 @@ public static class GrantsFighter
         BaseDefense = 0,
         BaseSpeed = -2,
         BaseMovement = 0,
-        BaseRange = RangeBracket.Adjacent,
+        MinRange = 1,
+        MaxRange = 1,
         BaseCooldown = 2,
     };
 
@@ -165,7 +174,8 @@ public static class GrantsFighter
         BaseDefense = 2,
         BaseSpeed = 0,
         BaseMovement = 0,
-        BaseRange = RangeBracket.Adjacent,
+        MinRange = 1,
+        MaxRange = 1,
         BaseCooldown = 2,
     };
 
@@ -180,7 +190,8 @@ public static class GrantsFighter
         BaseDefense = 3,
         BaseSpeed = 1,
         BaseMovement = 0,
-        BaseRange = RangeBracket.Adjacent,
+        MinRange = 1,
+        MaxRange = 1,
         BaseCooldown = 2,
     };
 
@@ -195,7 +206,8 @@ public static class GrantsFighter
         BaseDefense = 0,
         BaseSpeed = 0,
         BaseMovement = 2,
-        BaseRange = RangeBracket.Close,
+        MinRange = 2,
+        MaxRange = 2,
         BaseCooldown = 2,
     };
 
@@ -209,7 +221,8 @@ public static class GrantsFighter
         BaseDefense = 1,
         BaseSpeed = 2,
         BaseMovement = 0,
-        BaseRange = RangeBracket.Adjacent,
+        MinRange = 1,
+        MaxRange = 1,
         BaseCooldown = 2,
     };
 
@@ -224,7 +237,8 @@ public static class GrantsFighter
         BaseDefense = 0,
         BaseSpeed = -1,
         BaseMovement = 0,
-        BaseRange = RangeBracket.Adjacent,
+        MinRange = 1,
+        MaxRange = 1,
         BaseCooldown = 2,
     };
 
@@ -239,7 +253,8 @@ public static class GrantsFighter
         BaseDefense = 3,
         BaseSpeed = 3,
         BaseMovement = 2,
-        BaseRange = RangeBracket.Close,
+        MinRange = 2,
+        MaxRange = 2,
         BaseCooldown = 2,
     };
 
@@ -254,7 +269,8 @@ public static class GrantsFighter
         BaseDefense = 1,
         BaseSpeed = 0,
         BaseMovement = 0,
-        BaseRange = RangeBracket.Adjacent,
+        MinRange = 1,
+        MaxRange = 1,
         BaseCooldown = 2,
     };
 
@@ -271,9 +287,9 @@ public static class GrantsFighter
         BaseDefense = 0,
         BaseSpeed = -2,
         BaseMovement = 0,
-        BaseRange = RangeBracket.Adjacent,
+        MinRange = 1,
+        MaxRange = 1,
         BaseCooldown = 3,
-        RequiredRange = RangeBracket.Adjacent,
     };
 
     public static readonly SpecialCard S_BerserkRush = new()
@@ -286,7 +302,8 @@ public static class GrantsFighter
         BaseDefense = -1,
         BaseSpeed = 1,
         BaseMovement = 3,
-        BaseRange = RangeBracket.Close,
+        MinRange = 2,
+        MaxRange = 2,
         BaseCooldown = 3,
         Standalone = true,
     };
@@ -302,7 +319,8 @@ public static class GrantsFighter
         BaseDefense = 0,
         BaseSpeed = 0,
         BaseMovement = 0,
-        BaseRange = RangeBracket.Adjacent,
+        MinRange = 1,
+        MaxRange = 1,
         BaseCooldown = 1,
         Standalone = true,
     };

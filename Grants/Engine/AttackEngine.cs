@@ -39,16 +39,19 @@ public static class AttackEngine
         };
 
         // --- Range check ---
-        int requiredRange = attackerPair.EffectiveRangeValue;  // Use the combined range (unique + generic modifier)
+        // Attacks hit if distance is within the min/max range bracket
+        // Keywords like Lunge can extend the maximum range
+        int minRequiredRange = attackerPair.EffectiveMinRange;
+        int maxRequiredRange = attackerPair.EffectiveMaxRange;
         
-        // Lunge keyword: +1 range
+        // Lunge keyword: +1 to maximum range
         if (attackerPair.AllKeywords.ContainsKeyword(CardKeyword.Lunge))
-            requiredRange++;
+            maxRequiredRange++;
 
-        result.InRange = currentDistance <= requiredRange;
+        result.InRange = currentDistance >= minRequiredRange && currentDistance <= maxRequiredRange;
         if (!result.InRange)
         {
-            round.Log.Add($"{attacker.DisplayName} is out of range (dist={currentDistance}, range={requiredRange}).");
+            round.Log.Add($"{attacker.DisplayName} is out of range (dist={currentDistance}, range={minRequiredRange}-{maxRequiredRange}).");
             return result;
         }
 

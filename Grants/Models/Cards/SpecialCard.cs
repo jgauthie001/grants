@@ -4,14 +4,22 @@ namespace Grants.Models.Cards;
 /// Special card — high-impact, fighter-defining. Two per fighter.
 /// Base cooldown: 3 turns. Typically slow speed (-1 or -2), high power.
 /// May have positioning requirements or prerequisite opponent states.
+/// 
+/// Range System: Defines MIN and MAX hex distance for this special attack.
+/// Example: MinRange=1, MaxRange=3 means "can hit 1, 2, or 3 hexes away"
+/// Special cards don't pair with generics (unless Standalone=false), so their range is fixed.
 /// </summary>
 public class SpecialCard : CardBase
 {
     /// <summary>
-    /// Required range bracket for this special to be executable.
-    /// null = no positional requirement.
+    /// Minimum range in hexes. Attack can hit opponents at least this far away.
     /// </summary>
-    public RangeBracket? RequiredRange { get; init; }
+    public int MinRange { get; init; } = 1;
+
+    /// <summary>
+    /// Maximum range in hexes. Attack cannot hit opponents farther than this.
+    /// </summary>
+    public int MaxRange { get; init; } = 1;
 
     /// <summary>
     /// Optional prerequisite: a specific body location on the opponent must be

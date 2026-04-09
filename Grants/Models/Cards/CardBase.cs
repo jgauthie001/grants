@@ -41,7 +41,6 @@ public abstract class CardBase
     public int BaseDefense { get; set; }
     public int BaseSpeed { get; set; }       // -2 to +3
     public int BaseMovement { get; set; }    // Hexes moved when this card is used
-    public RangeBracket BaseRange { get; init; } = RangeBracket.Adjacent;
 
     // Keywords on this card (base set — upgrades may add keywords)
     public List<CardKeywordValue> Keywords { get; init; } = new();

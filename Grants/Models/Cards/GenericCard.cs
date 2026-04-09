@@ -5,10 +5,19 @@ namespace Grants.Models.Cards;
 /// Available only if the corresponding body location is NOT Disabled.
 /// Base cooldown: 1 turn.
 /// 
-/// Range interaction: GenericCard provides a RangeModifier (-1, 0, +1, etc.)
-/// paired with a UniqueCard's BaseRange to determine effective attack range.
-/// Example: Long Jab (generic, +1 range) + Combo Strike (unique, Mid range)
-///          = Effective range of Mid+1 (4 hexes)
+/// Range Interaction: GenericCard provides MIN and MAX range modifiers.
+/// These are added to the paired unique/special card's range to determine effective attack range.
+/// 
+/// Example:
+/// - Unique card: MinRange=1, MaxRange=2
+/// - Generic card: MinRangeModifier=0, MaxRangeModifier=+1
+/// - Effective range: 1 to 3 hexes
+/// 
+/// Interpretation:
+/// - MinRangeModifier: How much the minimum range can be extended (usually 0 or negative)
+/// - MaxRangeModifier: How much the maximum range can be extended (usually 0 or positive)
+/// - Negative modifiers reduce range (defensive stance)
+/// - Positive modifiers increase range (aggressive reach)
 /// </summary>
 public class GenericCard : CardBase
 {
@@ -22,16 +31,18 @@ public class GenericCard : CardBase
     public List<string> SatisfiesTags { get; init; } = new();
 
     /// <summary>
-    /// Range modifier for this generic card.
-    /// Applied to the paired unique/special card's BaseRange.
-    /// Examples:
-    /// - 0: Neutral range (takes unique card's range)
-    /// - +1: Reach increase (e.g., extended arm strike, forward step)
-    /// - -1: Short range penalty (e.g., defensive crouch, pulling hand back)
-    /// 
-    /// Interpretation:
-    /// - GenericCard with RangeModifier=+1 increases effective range by 1 bracket
-    /// - GenericCard with RangeModifier=-1 decreases effective range by 1 bracket
+    /// Modifier applied to the minimum range of the paired unique/special card.
+    /// Default 0 means no change to minimum range.
+    /// -1 means minimum range is reduced by 1 (e.g., 2→1, requires getting closer)
+    /// +1 means minimum range is increased by 1 (e.g., works from farther away)
     /// </summary>
-    public int RangeModifier { get; init; } = 0;
+    public int MinRangeModifier { get; init; } = 0;
+
+    /// <summary>
+    /// Modifier applied to the maximum range of the paired unique/special card.
+    /// Default 0 means no change to maximum range.
+    /// -1 means maximum range is reduced by 1 (e.g., 3→2, shorter reach)
+    /// +1 means maximum range is increased by 1 (e.g., 3→4, extended reach)
+    /// </summary>
+    public int MaxRangeModifier { get; init; } = 0;
 }

@@ -51,8 +51,17 @@ public static class CardTooltip
         $"Defense: {card.BaseDefense:+#;-#;0}",
         $"Speed: {card.BaseSpeed:+#;-#;0}",
         $"Movement: {card.BaseMovement} hex",
-        $"Range: {card.BaseRange}",
+        $"Range: {GetRangeDisplay(card)}",
         $"Cooldown: {card.BaseCooldown} turn" + (card.BaseCooldown != 1 ? "s" : ""),
+    };
+
+    /// <summary>Get range display for this card type.</summary>
+    private static string GetRangeDisplay(CardBase card) => card switch
+    {
+        UniqueCard unique => $"{unique.MinRange}-{unique.MaxRange}",
+        SpecialCard special => $"{special.MinRange}-{special.MaxRange}",
+        GenericCard => "Modifier",  // Generic cards don't have inherent range
+        _ => "?"
     };
 
     /// <summary>Build full tooltip content for a card.</summary>
