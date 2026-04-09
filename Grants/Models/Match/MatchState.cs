@@ -86,6 +86,9 @@ public class MatchState
     public CardPair? SelectedPairA { get; set; }
     public CardPair? SelectedPairB { get; set; }
 
+    // Player's explicit movement destination (null = auto-move toward opponent)
+    public HexCoord? ChosenMoveA { get; set; }
+
     // Whether each fighter is human or AI-controlled
     public bool FighterAIsHuman { get; init; } = true;
     public bool FighterBIsHuman { get; init; } = false;

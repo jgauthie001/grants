@@ -48,11 +48,13 @@ public static class ResolutionEngine
         // ===== MOVEMENT PHASE =====
         HexCoord newPosA, newPosB;
 
+        var chosenMoveA = match.ChosenMoveA;
+
         if (round.FighterAFaster)
         {
             // A moves first — B hasn't moved yet, so B blocks A's movement
             match.Board.SetOccupied(posB, true);
-            newPosA = MovementEngine.ResolveMovement(fa, pairA, posA, posB, match.Board);
+            newPosA = MovementEngine.ResolveMovement(fa, pairA, posA, posB, match.Board, chosenMoveA);
             match.Board.SetOccupied(posB, false);
             match.Board.SetOccupied(newPosA, true);
             newPosB = MovementEngine.ResolveMovement(fb, pairB, posB, newPosA, match.Board);
@@ -64,13 +66,13 @@ public static class ResolutionEngine
             newPosB = MovementEngine.ResolveMovement(fb, pairB, posB, posA, match.Board);
             match.Board.SetOccupied(posA, false);
             match.Board.SetOccupied(newPosB, true);
-            newPosA = MovementEngine.ResolveMovement(fa, pairA, posA, newPosB, match.Board);
+            newPosA = MovementEngine.ResolveMovement(fa, pairA, posA, newPosB, match.Board, chosenMoveA);
             match.Board.SetOccupied(newPosB, false);
         }
         else
         {
             // Speed tie: both move simultaneously from original positions
-            newPosA = MovementEngine.ResolveMovement(fa, pairA, posA, posB, match.Board);
+            newPosA = MovementEngine.ResolveMovement(fa, pairA, posA, posB, match.Board, chosenMoveA);
             newPosB = MovementEngine.ResolveMovement(fb, pairB, posB, posA, match.Board);
         }
 

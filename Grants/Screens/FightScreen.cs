@@ -40,6 +40,11 @@ public class FightScreen : GameScreen
     private KeyboardState _prevKeys;
     private MouseState _prevMouse;
 
+    // Movement selection state
+    private bool _awaitingMovement = false;
+    private List<Models.Board.HexCoord> _validMoveHexes = new();
+    private int _moveSelectionIndex = 0; // 0 = stay put, 1+ = index into _validMoveHexes
+
     // Tooltip tracking
     private CardBase? _hoveredCard = null;
     private float _hoverTime = 0f;
@@ -164,6 +169,44 @@ public class FightScreen : GameScreen
                     }
                 }
             }
+            else if (_match.Phase == MatchPhase.CardSelection && _awaitingMovement)
+            {
+                // Movement destination selection
+                if (IsPressed(keys, _prevKeys, Keys.Right) || IsPressed(keys, _prevKeys, Keys.D) || IsPressed(keys, _prevKeys, Keys.Tab))
+                    _moveSelectionIndex = (_moveSelectionIndex + 1) % (_validMoveHexes.Count + 1);
+                if (IsPressed(keys, _prevKeys, Keys.Left) || IsPressed(keys, _prevKeys, Keys.A))
+                    _moveSelectionIndex = (_moveSelectionIndex - 1 + _validMoveHexes.Count + 1) % (_validMoveHexes.Count + 1);
+
+                if (IsPressed(keys, _prevKeys, Keys.Enter) || IsPressed(keys, _prevKeys, Keys.Space))
+                {
+                    _match.ChosenMoveA = _moveSelectionIndex == 0 ? null : _validMoveHexes[_moveSelectionIndex - 1];
+                    _awaitingMovement = false;
+                    ExecuteRound();
+                }
+
+                if (IsPressed(keys, _prevKeys, Keys.Escape))
+                {
+                    _match.ChosenMoveA = null;
+                    _awaitingMovement = false;
+                    ExecuteRound();
+                }
+
+                // Click on a valid hex to move there
+                if (mouse.LeftButton == ButtonState.Pressed && _prevMouse.LeftButton == ButtonState.Released)
+                {
+                    for (int i = 0; i < _validMoveHexes.Count; i++)
+                    {
+                        var (hx, hy) = Models.Board.HexBoard.HexToPixel(_validMoveHexes[i], HexSize, BoardOriginX, BoardOriginY);
+                        if (Vector2.Distance(new Vector2(mouse.X, mouse.Y), new Vector2(hx, hy)) <= HexSize)
+                        {
+                            _match.ChosenMoveA = _validMoveHexes[i];
+                            _awaitingMovement = false;
+                            ExecuteRound();
+                            break;
+                        }
+                    }
+                }
+            }
             else if (_match.Phase == MatchPhase.RoundResult)
             {
                 if (IsPressed(keys, _prevKeys, Keys.Enter) || IsPressed(keys, _prevKeys, Keys.Space))
@@ -201,13 +244,6 @@ public class FightScreen : GameScreen
     {
         if (_selectedGeneric == null || _validUniques.Count == 0) return;
 
-        var logPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "game_debug.log");
-        using (var writer = new StreamWriter(logPath, append: true))
-        {
-            writer.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] CommitPlayerChoice: selecting move");
-            writer.Flush();
-        }
-
         var unique = _validUniques[_uniqueSelectionIndex];
         var pair = new CardPair
         {
@@ -217,34 +253,37 @@ public class FightScreen : GameScreen
         };
 
         _match.SelectedPairA = pair;
-        
-        using (var writer = new StreamWriter(logPath, append: true))
-        {
-            writer.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Getting AI selection");
-            writer.Flush();
-        }
-        
         _match.SelectedPairB = AiEngine.SelectPair(_match.FighterB, _match.FighterA, _match.Board);
         _playerCommitted = true;
-
-        using (var writer = new StreamWriter(logPath, append: true))
-        {
-            writer.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Resolving round");
-            writer.Flush();
-        }
-        
-        var round = ResolutionEngine.ResolveRound(_match);
-        _roundLog = round.Log;
-        
-        using (var writer = new StreamWriter(logPath, append: true))
-        {
-            writer.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Round resolved, phase={_match.Phase}");
-            writer.Flush();
-        }
-        
-        // Reset selection for next round
         _selectedGeneric = null;
         _validUniques.Clear();
+
+        // Check if this pair grants movement — if so, let player choose destination
+        int movement = _match.FighterA.GetCardMovement(pair.Generic!)
+            + (pair.Unique?.BaseMovement ?? pair.Special?.BaseMovement ?? 0);
+
+        if (movement > 0)
+        {
+            var pos = new Models.Board.HexCoord(_match.FighterA.HexQ, _match.FighterA.HexR);
+            var oppPos = new Models.Board.HexCoord(_match.FighterB.HexQ, _match.FighterB.HexR);
+            _match.Board.SetOccupied(oppPos, true);
+            _validMoveHexes = Models.Board.HexMath.ReachableHexes(pos, movement, _match.Board);
+            _match.Board.SetOccupied(oppPos, false);
+            _moveSelectionIndex = 0; // 0 = stay put
+            _awaitingMovement = true;
+        }
+        else
+        {
+            _match.ChosenMoveA = null;
+            ExecuteRound();
+        }
+    }
+
+    private void ExecuteRound()
+    {
+        var round = ResolutionEngine.ResolveRound(_match);
+        _roundLog = round.Log;
+        _match.ChosenMoveA = null;
     }
 
     private void HandleMatchEnd()
@@ -291,7 +330,19 @@ public class FightScreen : GameScreen
         foreach (var cell in _match.Board.AllCells)
         {
             var (px, py) = Models.Board.HexBoard.HexToPixel(cell, HexSize, BoardOriginX, BoardOriginY);
-            DrawHex(sb, (int)px, (int)py, (int)HexSize - 2, Color.DarkSlateGray);
+
+            Color hexColor = Color.DarkSlateGray;
+            if (_awaitingMovement)
+            {
+                // Highlight selected destination (index > 0) in gold
+                if (_moveSelectionIndex > 0 && _validMoveHexes[_moveSelectionIndex - 1] == cell)
+                    hexColor = Color.Goldenrod;
+                // Highlight all valid destinations in green
+                else if (_validMoveHexes.Contains(cell))
+                    hexColor = new Color(20, 80, 20);
+            }
+
+            DrawHex(sb, (int)px, (int)py, (int)HexSize - 2, hexColor);
         }
 
         // Fighter A position
@@ -307,6 +358,23 @@ public class FightScreen : GameScreen
             HexSize, BoardOriginX, BoardOriginY);
         DrawHex(sb, (int)bx, (int)by, (int)HexSize - 4, Color.Crimson);
         sb.DrawString(_smallFont, "B", new Vector2(bx - 5, by - 7), Color.White);
+
+        // Movement selection overlay
+        if (_awaitingMovement)
+        {
+            var playerPos = _moveSelectionIndex == 0
+                ? new Models.Board.HexCoord(_match.FighterA.HexQ, _match.FighterA.HexR)
+                : _validMoveHexes[_moveSelectionIndex - 1];
+            var oppPos = new Models.Board.HexCoord(_match.FighterB.HexQ, _match.FighterB.HexR);
+            int previewDist = playerPos.DistanceTo(oppPos);
+
+            string stayLabel = _moveSelectionIndex == 0 ? "> Stay" : "  Stay";
+            sb.DrawString(_smallFont, "Choose position:", new Vector2(BoardOriginX - 220, BoardOriginY + 150), Color.White);
+            sb.DrawString(_smallFont, stayLabel, new Vector2(BoardOriginX - 220, BoardOriginY + 167), _moveSelectionIndex == 0 ? Color.Yellow : Color.Gray);
+            sb.DrawString(_smallFont, $"Dist to opponent: {previewDist}", new Vector2(BoardOriginX - 220, BoardOriginY + 184), Color.LightCyan);
+            sb.DrawString(_smallFont, "[Left/Right] Cycle  [Enter] Confirm  [Esc] Stay",
+                new Vector2(BoardOriginX - 180, BoardOriginY + 210), Color.DimGray);
+        }
     }
 
     private void DrawDamageStates(SpriteBatch sb)
@@ -359,7 +427,7 @@ public class FightScreen : GameScreen
                 var card = _validGenerics[i];
                 bool sel = i == _genericSelectionIndex;
                 Color c = sel ? Color.Yellow : Color.LightGray;
-                string label = $"{(sel ? ">" : " ")} {card.Name}  [Spd:{card.BaseSpeed:+#;-#;0} Pwr:{card.BasePower} Def:{card.BaseDefense}]";
+                string label = $"{(sel ? ">" : " ")} {card.Name}  [Spd:{card.BaseSpeed:+#;-#;0} Pwr:{card.BasePower} Def:{card.BaseDefense} Mv:{card.BaseMovement}]";
                 sb.DrawString(_smallFont, label, new Vector2(panelX, panelY + 24 + i * 18), c);
             }
 
@@ -389,7 +457,11 @@ public class FightScreen : GameScreen
                     SpecialCard s => s.Name,
                     _ => "?"
                 };
-                string label = $"{(sel ? ">" : " ")} {cardName}  [Spd:{card.BaseSpeed:+#;-#;0} Pwr:{card.BasePower} Def:{card.BaseDefense}]";
+                // Compute effective range and combined movement for this pair
+                var tempPair = new CardPair { Generic = _selectedGeneric, Unique = card as UniqueCard, Special = card as SpecialCard };
+                string rangeStr = $"{tempPair.EffectiveMinRange}-{tempPair.EffectiveMaxRange}";
+                int combinedMv = _match.FighterA.GetCardMovement(_selectedGeneric!) + card.BaseMovement;
+                string label = $"{(sel ? ">" : " ")} {cardName}  [Spd:{card.BaseSpeed:+#;-#;0} Pwr:{card.BasePower} Def:{card.BaseDefense} Mv:{combinedMv} Rng:{rangeStr}]";
                 sb.DrawString(_smallFont, label, new Vector2(panelX, panelY + 24 + i * 18), c);
             }
 

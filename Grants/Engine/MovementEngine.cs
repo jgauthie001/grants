@@ -22,11 +22,21 @@ public static class MovementEngine
         CardPair pair,
         HexCoord currentPos,
         HexCoord opponentPos,
-        HexBoard board)
+        HexBoard board,
+        HexCoord? chosenDestination = null)
     {
         int movement = mover.GetCardMovement(pair.Generic!) + (pair.Unique?.BaseMovement ?? pair.Special?.BaseMovement ?? 0);
 
         if (movement <= 0) return currentPos;
+
+        // If player chose a destination explicitly, use it if valid
+        if (chosenDestination.HasValue)
+        {
+            var dest = chosenDestination.Value;
+            if (board.IsValid(dest) && !board.IsOccupied(dest) && dest != opponentPos)
+                return dest;
+            // Chosen hex is blocked (e.g. opponent moved there) — fall through to auto-move
+        }
 
         // Determine direction: default is toward opponent unless Retreat keyword present
         bool retreating = pair.AllKeywords.ContainsKeyword(CardKeyword.Retreat);
