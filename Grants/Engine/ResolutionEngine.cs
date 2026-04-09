@@ -9,9 +9,9 @@ namespace Grants.Engine;
 /// Orchestrates a full round of combat:
 /// 1. Receive both committed card pairs
 /// 2. Determine speed order
-/// 3. Apply movement (faster fighter first)
-/// 4. Apply attacks in speed order
-/// 5. Handle simultaneous (speed tie)
+/// 3. Faster fighter: move then attack
+/// 4. Slower fighter: move then attack (can be cancelled if disabled by step 3)
+/// 5. Speed tie: simultaneous move+attack
 /// 6. Process keywords, cooldowns
 /// 7. Check KO
 /// Returns a completed RoundState.
@@ -41,60 +41,39 @@ public static class ResolutionEngine
 
         var posA = new HexCoord(fa.HexQ, fa.HexR);
         var posB = new HexCoord(fb.HexQ, fb.HexR);
+        var chosenMoveA = match.ChosenMoveA;
 
         round.Log.Add($"--- Round {round.RoundNumber} ---");
         round.Log.Add($"Speed: {fa.DisplayName}={speedA}, {fb.DisplayName}={speedB}.");
 
-        // ===== MOVEMENT PHASE =====
-        HexCoord newPosA, newPosB;
-
-        var chosenMoveA = match.ChosenMoveA;
-
         if (round.FighterAFaster)
         {
-            // A moves first — B hasn't moved yet, so B blocks A's movement
+            // ===== FASTER: A moves then attacks =====
             match.Board.SetOccupied(posB, true);
-            newPosA = MovementEngine.ResolveMovement(fa, pairA, posA, posB, match.Board, chosenMoveA);
+            var newPosA = MovementEngine.ResolveMovement(fa, pairA, posA, posB, match.Board, chosenMoveA);
             match.Board.SetOccupied(posB, false);
-            match.Board.SetOccupied(newPosA, true);
-            newPosB = MovementEngine.ResolveMovement(fb, pairB, posB, newPosA, match.Board);
-            match.Board.SetOccupied(newPosA, false);
-        }
-        else if (round.FighterBFaster)
-        {
-            match.Board.SetOccupied(posA, true);
-            newPosB = MovementEngine.ResolveMovement(fb, pairB, posB, posA, match.Board);
-            match.Board.SetOccupied(posA, false);
-            match.Board.SetOccupied(newPosB, true);
-            newPosA = MovementEngine.ResolveMovement(fa, pairA, posA, newPosB, match.Board, chosenMoveA);
-            match.Board.SetOccupied(newPosB, false);
-        }
-        else
-        {
-            // Speed tie: both move simultaneously from original positions
-            newPosA = MovementEngine.ResolveMovement(fa, pairA, posA, posB, match.Board, chosenMoveA);
-            newPosB = MovementEngine.ResolveMovement(fb, pairB, posB, posA, match.Board);
-        }
+            fa.HexQ = newPosA.Q; fa.HexR = newPosA.R;
+            int distA = newPosA.DistanceTo(posB);
+            round.Log.Add($"{fa.DisplayName} moves to {newPosA} (dist={distA}).");
 
-        // Commit positions
-        fa.HexQ = newPosA.Q; fa.HexR = newPosA.R;
-        fb.HexQ = newPosB.Q; fb.HexR = newPosB.R;
-        int distAfterMove = newPosA.DistanceTo(newPosB);
+            var resultA = AttackEngine.Resolve(fa, pairA, fb, pairB, distA, round);
 
-        round.Log.Add($"After movement: dist={distAfterMove}. {fa.DisplayName} at {newPosA}, {fb.DisplayName} at {newPosB}.");
-
-        // ===== ATTACK PHASE =====
-        if (round.FighterAFaster)
-        {
-            // A attacks from new positions; if A lands and disables B's paired body part, B's attack is cancelled
-            var resultA = AttackEngine.Resolve(fa, pairA, fb, pairB, distAfterMove, round);
-            round.FighterBMissed = !resultA.InRange; // B is the target — irrelevant but symmetric
-
+            // ===== SLOWER: B moves then attacks (only if not disabled) =====
             bool bAttackCancelled = IsPairedBodyPartDisabled(fb, pairB);
             if (!bAttackCancelled)
-                AttackEngine.Resolve(fb, pairB, fa, pairA, distAfterMove, round);
+            {
+                match.Board.SetOccupied(newPosA, true);
+                var newPosB = MovementEngine.ResolveMovement(fb, pairB, posB, newPosA, match.Board);
+                match.Board.SetOccupied(newPosA, false);
+                fb.HexQ = newPosB.Q; fb.HexR = newPosB.R;
+                int distB = newPosA.DistanceTo(newPosB);
+                round.Log.Add($"{fb.DisplayName} moves to {newPosB} (dist={distB}).");
+                AttackEngine.Resolve(fb, pairB, fa, pairA, distB, round);
+            }
             else
-                round.Log.Add($"{fb.DisplayName}'s attack cancelled — required body part disabled mid-round.");
+            {
+                round.Log.Add($"{fb.DisplayName}'s action cancelled — required body part disabled.");
+            }
 
             round.Outcome = resultA.Landed
                 ? (bAttackCancelled ? RoundOutcome.FighterAWins : RoundOutcome.BothHit)
@@ -102,12 +81,32 @@ public static class ResolutionEngine
         }
         else if (round.FighterBFaster)
         {
-            var resultB = AttackEngine.Resolve(fb, pairB, fa, pairA, distAfterMove, round);
+            // ===== FASTER: B moves then attacks =====
+            match.Board.SetOccupied(posA, true);
+            var newPosB = MovementEngine.ResolveMovement(fb, pairB, posB, posA, match.Board);
+            match.Board.SetOccupied(posA, false);
+            fb.HexQ = newPosB.Q; fb.HexR = newPosB.R;
+            int distB = posA.DistanceTo(newPosB);
+            round.Log.Add($"{fb.DisplayName} moves to {newPosB} (dist={distB}).");
+
+            var resultB = AttackEngine.Resolve(fb, pairB, fa, pairA, distB, round);
+
+            // ===== SLOWER: A moves then attacks (only if not disabled) =====
             bool aAttackCancelled = IsPairedBodyPartDisabled(fa, pairA);
             if (!aAttackCancelled)
-                AttackEngine.Resolve(fa, pairA, fb, pairB, distAfterMove, round);
+            {
+                match.Board.SetOccupied(newPosB, true);
+                var newPosA = MovementEngine.ResolveMovement(fa, pairA, posA, newPosB, match.Board, chosenMoveA);
+                match.Board.SetOccupied(newPosB, false);
+                fa.HexQ = newPosA.Q; fa.HexR = newPosA.R;
+                int distA = newPosA.DistanceTo(newPosB);
+                round.Log.Add($"{fa.DisplayName} moves to {newPosA} (dist={distA}).");
+                AttackEngine.Resolve(fa, pairA, fb, pairB, distA, round);
+            }
             else
-                round.Log.Add($"{fa.DisplayName}'s attack cancelled — required body part disabled mid-round.");
+            {
+                round.Log.Add($"{fa.DisplayName}'s action cancelled — required body part disabled.");
+            }
 
             round.Outcome = resultB.Landed
                 ? (aAttackCancelled ? RoundOutcome.FighterBWins : RoundOutcome.BothHit)
@@ -115,9 +114,16 @@ public static class ResolutionEngine
         }
         else
         {
-            // Speed tie: simultaneous — both resolve, no cancellation, both take damage
-            var resultA = AttackEngine.Resolve(fa, pairA, fb, pairB, distAfterMove, round);
-            var resultB = AttackEngine.Resolve(fb, pairB, fa, pairA, distAfterMove, round);
+            // ===== SPEED TIE: simultaneous — both move then both attack =====
+            var newPosA = MovementEngine.ResolveMovement(fa, pairA, posA, posB, match.Board, chosenMoveA);
+            var newPosB = MovementEngine.ResolveMovement(fb, pairB, posB, posA, match.Board);
+            fa.HexQ = newPosA.Q; fa.HexR = newPosA.R;
+            fb.HexQ = newPosB.Q; fb.HexR = newPosB.R;
+            int dist = newPosA.DistanceTo(newPosB);
+            round.Log.Add($"Simultaneous: {fa.DisplayName} at {newPosA}, {fb.DisplayName} at {newPosB} (dist={dist}).");
+
+            var resultA = AttackEngine.Resolve(fa, pairA, fb, pairB, dist, round);
+            var resultB = AttackEngine.Resolve(fb, pairB, fa, pairA, dist, round);
 
             round.FighterAMissed = !resultA.InRange;
             round.FighterBMissed = !resultB.InRange;
