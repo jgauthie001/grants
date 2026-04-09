@@ -24,6 +24,9 @@ public readonly struct HexCoord : IEquatable<HexCoord>
     public HexCoord Neighbor(int direction) =>
         this + Directions[((direction % 6) + 6) % 6];
 
+    public List<HexCoord> GetNeighbors() =>
+        new() { Neighbor(0), Neighbor(1), Neighbor(2), Neighbor(3), Neighbor(4), Neighbor(5) };
+
     public int DistanceTo(HexCoord other) =>
         (Math.Abs(Q - other.Q) + Math.Abs(R - other.R) + Math.Abs(S - other.S)) / 2;
 

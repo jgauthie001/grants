@@ -1,6 +1,7 @@
 using Grants.Models.Cards;
 using Grants.Models.Fighter;
 using Grants.Models.Board;
+using Grants.Models.Stage;
 
 namespace Grants.Models.Match;
 
@@ -76,6 +77,10 @@ public class MatchState
 
     public int CurrentRound { get; set; } = 1;
     public List<RoundState> History { get; private set; } = new();
+
+    // Stage modifier for environmental effects
+    public StageModifier Stage { get; init; } = StandardStage.Instance;
+    public StageState StageState { get; set; } = null!;
 
     // Card selections for current round (set during CardSelection phase)
     public CardPair? SelectedPairA { get; set; }
