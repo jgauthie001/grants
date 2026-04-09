@@ -39,7 +39,8 @@ public static class AttackEngine
         };
 
         // --- Range check ---
-        int requiredRange = (int)attackerPair.EffectiveRange;
+        int requiredRange = attackerPair.EffectiveRangeValue;  // Use the combined range (unique + generic modifier)
+        
         // Lunge keyword: +1 range
         if (attackerPair.AllKeywords.ContainsKeyword(CardKeyword.Lunge))
             requiredRange++;

@@ -31,11 +31,51 @@ public class CardPair
     public int CombinedMovement =>
         (Generic?.BaseMovement ?? 0) + (Unique?.BaseMovement ?? Special?.BaseMovement ?? 0);
 
-    /// <summary>Effective range of the attack portion of this action.</summary>
-    public RangeBracket EffectiveRange =>
-        Unique?.BaseRange ?? Special?.BaseRange ?? Generic?.BaseRange ?? RangeBracket.Adjacent;
+    /// <summary>
+    /// Effective range of the attack portion of this action.
+    /// For normal pairs: UniqueCard.BaseRange + GenericCard.RangeModifier
+    /// For standalone specials: SpecialCard.BaseRange
+    /// 
+    /// Range values: Adjacent=1, Close=2, Mid=3, Far=4
+    /// Modifiers can shift range up/down (e.g., +1 for extended reach, -1 for short range).
+    /// Final range is clamped to valid brackets.
+    /// </summary>
+    public int EffectiveRangeValue
+    {
+        get
+        {
+            int baseRange = (Unique?.BaseRange ?? Special?.BaseRange ?? RangeBracket.Adjacent) switch
+            {
+                RangeBracket.Adjacent => 1,
+                RangeBracket.Close => 2,
+                RangeBracket.Mid => 3,
+                RangeBracket.Far => 4,
+                _ => 1
+            };
 
-    /// <summary>All keywords from both cards combined.</summary>
+            int modifier = Generic?.RangeModifier ?? 0;
+            int effectiveRange = baseRange + modifier;
+
+            // Clamp to valid range (minimum Adjacent=1, practical maximum Far=4 but allow higher)
+            return Math.Max(1, effectiveRange);
+        }
+    }
+
+    /// <summary>
+    /// Effective range as a RangeBracket enum.
+    /// Used for display and legacy compatibility.
+    /// </summary>
+    public RangeBracket EffectiveRange =>
+        EffectiveRangeValue switch
+        {
+            1 => RangeBracket.Adjacent,
+            2 => RangeBracket.Close,
+            3 => RangeBracket.Mid,
+            4 or _ => RangeBracket.Far  // 4+ all map to Far
+        };
+
+    /// <summary>Combined range for display. For UI showing range value.</summary>
+    public int CombinedRange => EffectiveRangeValue;
     public IEnumerable<CardKeywordValue> AllKeywords =>
         (Generic?.Keywords ?? Enumerable.Empty<CardKeywordValue>())
         .Concat(Unique?.Keywords ?? Enumerable.Empty<CardKeywordValue>())

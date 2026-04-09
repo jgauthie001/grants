@@ -28,7 +28,7 @@ public static class GrantsFighter
         BaseDefense = 1,
         BaseSpeed = 0,
         BaseMovement = 0,
-        BaseRange = RangeBracket.Adjacent,
+        RangeModifier = 0,
         BaseCooldown = 1,
     };
 
@@ -43,7 +43,7 @@ public static class GrantsFighter
         BaseDefense = 2,
         BaseSpeed = -1,
         BaseMovement = 0,
-        BaseRange = RangeBracket.Adjacent,
+        RangeModifier = 0,
         BaseCooldown = 1,
     };
 
@@ -58,7 +58,7 @@ public static class GrantsFighter
         BaseDefense = 1,
         BaseSpeed = 1,
         BaseMovement = 0,
-        BaseRange = RangeBracket.Adjacent,
+        RangeModifier = 0,
         BaseCooldown = 1,
     };
 
@@ -73,7 +73,7 @@ public static class GrantsFighter
         BaseDefense = 1,
         BaseSpeed = 0,
         BaseMovement = 0,
-        BaseRange = RangeBracket.Adjacent,
+        RangeModifier = 0,
         BaseCooldown = 1,
     };
 
@@ -88,7 +88,7 @@ public static class GrantsFighter
         BaseDefense = 1,
         BaseSpeed = 1,
         BaseMovement = 1,
-        BaseRange = RangeBracket.Adjacent,
+        RangeModifier = 0,
         BaseCooldown = 1,
     };
 
@@ -103,7 +103,7 @@ public static class GrantsFighter
         BaseDefense = 1,
         BaseSpeed = 0,
         BaseMovement = 1,
-        BaseRange = RangeBracket.Adjacent,
+        RangeModifier = 0,
         BaseCooldown = 1,
     };
 
@@ -118,7 +118,7 @@ public static class GrantsFighter
         BaseDefense = 2,
         BaseSpeed = -1,
         BaseMovement = 0,
-        BaseRange = RangeBracket.Adjacent,
+        RangeModifier = 0,
         BaseCooldown = 1,
     };
 
@@ -133,7 +133,7 @@ public static class GrantsFighter
         BaseDefense = 2,
         BaseSpeed = 2,
         BaseMovement = 2,
-        BaseRange = RangeBracket.Close,
+        RangeModifier = 1,
         BaseCooldown = 1,
     };
 
