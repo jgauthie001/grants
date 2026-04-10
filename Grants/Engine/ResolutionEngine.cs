@@ -141,8 +141,8 @@ public static class ResolutionEngine
         // ===== COOLDOWNS =====
         ApplyCooldowns(fa, pairA, fb.StaggerTurnsRemaining > 0);
         ApplyCooldowns(fb, pairB, fa.StaggerTurnsRemaining > 0);
-        fa.TickCooldowns();
-        fb.TickCooldowns();
+        // Note: TickCooldowns is called at the start of the next card-selection phase
+        // (in FightScreen.LoadAvailablePairs) so cooldowns last the full turn.
 
         // ===== KO CHECK =====
         bool aKO = fa.IsKnockedOut();

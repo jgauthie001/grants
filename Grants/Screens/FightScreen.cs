@@ -99,6 +99,11 @@ public class FightScreen : GameScreen
 
     private void LoadAvailablePairs()
     {
+        // Tick cooldowns now (start of selection phase) so a BaseCooldown=1 card
+        // is unavailable for one full turn after being played.
+        _match.FighterA.TickCooldowns();
+        _match.FighterB.TickCooldowns();
+
         // Reset two-step selection
         _selectedGeneric = null;
         var available = _match.FighterA.GetAvailableGenerics();
@@ -404,7 +409,7 @@ public class FightScreen : GameScreen
     private void DrawOpponentCards(SpriteBatch sb)
     {
         var opp = _match.FighterB;
-        int x = 820, y = 200;
+        int x = 980, y = 200;
 
         sb.DrawString(_font, "Opponent Cards", new Vector2(x, y), Color.LightGray);
         y += 24;

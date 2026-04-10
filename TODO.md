@@ -40,6 +40,8 @@
 
 ## Polish / QA
 
+- [ ] Resolution support — UI positions are currently hardcoded for 1280×720; add support for common resolutions (1920×1080, 1600×900, etc.) using scaled/relative layout
+
 - [ ] Window title ("Grants")
 - [ ] Background color / art pass for all screens
 - [ ] Sound effects placeholder (MonoGame SoundEffect)
