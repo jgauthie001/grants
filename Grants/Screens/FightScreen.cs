@@ -267,7 +267,7 @@ public class FightScreen : GameScreen
             var pos = new Models.Board.HexCoord(_match.FighterA.HexQ, _match.FighterA.HexR);
             var oppPos = new Models.Board.HexCoord(_match.FighterB.HexQ, _match.FighterB.HexR);
             _match.Board.SetOccupied(oppPos, true);
-            _validMoveHexes = Models.Board.HexMath.ReachableHexes(pos, movement, _match.Board);
+            _validMoveHexes = Engine.MovementEngine.GetReachableHexes(_match.FighterA, pair, pos, oppPos, _match.Board);
             _match.Board.SetOccupied(oppPos, false);
             _moveSelectionIndex = 0; // 0 = stay put
             _awaitingMovement = true;
@@ -461,7 +461,14 @@ public class FightScreen : GameScreen
                 var tempPair = new CardPair { Generic = _selectedGeneric, Unique = card as UniqueCard, Special = card as SpecialCard };
                 string rangeStr = $"{tempPair.EffectiveMinRange}-{tempPair.EffectiveMaxRange}";
                 int combinedMv = _match.FighterA.GetCardMovement(_selectedGeneric!) + card.BaseMovement;
-                string label = $"{(sel ? ">" : " ")} {cardName}  [Spd:{card.BaseSpeed:+#;-#;0} Pwr:{card.BasePower} Def:{card.BaseDefense} Mv:{combinedMv} Rng:{rangeStr}]";
+                string mvType = tempPair.CombinedMovementType switch
+                {
+                    Models.Cards.MovementType.Approach => ">",
+                    Models.Cards.MovementType.Retreat  => "<",
+                    Models.Cards.MovementType.Free     => "*",
+                    _                                  => "-",
+                };
+                string label = $"{(sel ? ">" : " ")} {cardName}  [Spd:{card.BaseSpeed:+#;-#;0} Pwr:{card.BasePower} Def:{card.BaseDefense} Mv:{mvType}{combinedMv} Rng:{rangeStr}]";
                 sb.DrawString(_smallFont, label, new Vector2(panelX, panelY + 24 + i * 18), c);
             }
 

@@ -32,6 +32,21 @@ public class CardPair
         (Generic?.BaseMovement ?? 0) + (Unique?.BaseMovement ?? Special?.BaseMovement ?? 0);
 
     /// <summary>
+    /// Movement type for this pair. The unique/special card's type takes priority
+    /// (it defines the intent of the move — Approach/Retreat/Free). The generic
+    /// card's type is a fallback if the unique/special has None.
+    /// </summary>
+    public MovementType CombinedMovementType
+    {
+        get
+        {
+            var primary = Unique?.BaseMovementType ?? Special?.BaseMovementType ?? MovementType.None;
+            if (primary != MovementType.None) return primary;
+            return Generic?.BaseMovementType ?? MovementType.None;
+        }
+    }
+
+    /// <summary>
     /// Minimum range (in hexes) this pair can hit.
     /// For normal pairs: Unique.MinRange + Generic.MinRangeModifier
     /// For standalone specials: Special.MinRange

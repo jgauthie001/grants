@@ -11,6 +11,7 @@
   - Verify profile save/load round-trips correctly
 - [ ] Hex board rendering: replace placeholder filled-square `DrawHex` with
   actual hexagon shape (6-sided polygon or pre-made texture)
+- [ ] Add range display to CharacterBuilderScreen — show MinRange/MaxRange on unique/special cards
 
 ## Gameplay
 

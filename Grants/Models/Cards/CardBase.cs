@@ -28,6 +28,21 @@ public enum RangeBracket
 }
 
 /// <summary>
+/// Defines how the movement on a card is applied relative to the opponent.
+/// </summary>
+public enum MovementType
+{
+    /// <summary>Move toward opponent by this many hexes.</summary>
+    Approach,
+    /// <summary>Move away from opponent by this many hexes.</summary>
+    Retreat,
+    /// <summary>Move freely in any direction (player chooses destination).</summary>
+    Free,
+    /// <summary>No repositioning — card is stationary.</summary>
+    None,
+}
+
+/// <summary>
 /// Base class for all card types. Holds shared stats and upgrade slot tracking.
 /// </summary>
 public abstract class CardBase
@@ -41,6 +56,7 @@ public abstract class CardBase
     public int BaseDefense { get; set; }
     public int BaseSpeed { get; set; }       // -2 to +3
     public int BaseMovement { get; set; }    // Hexes moved when this card is used
+    public MovementType BaseMovementType { get; set; } = MovementType.None;
 
     // Keywords on this card (base set — upgrades may add keywords)
     public List<CardKeywordValue> Keywords { get; init; } = new();

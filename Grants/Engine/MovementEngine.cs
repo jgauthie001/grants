@@ -1,21 +1,22 @@
 using Grants.Models.Board;
 using Grants.Models.Cards;
 using Grants.Models.Fighter;
-using Grants.Models.Match;
 
 namespace Grants.Engine;
 
 /// <summary>
-/// Handles positioning: applies movement from a CardPair to a FighterInstance,
-/// validates against board bounds, and checks if they end up occupying the same hex.
-/// Called before attack resolution (faster fighter moves first).
+/// Handles positioning: applies movement from a CardPair to a FighterInstance.
+/// Movement is relational to the opponent:
+///   Approach — moves toward the opponent by up to N hexes
+///   Retreat  — moves away from the opponent by up to N hexes
+///   Free     — player picks any reachable hex (shown as highlighted board hexes)
+///   None     — card is stationary; no repositioning
 /// </summary>
 public static class MovementEngine
 {
     /// <summary>
     /// Apply movement from a card pair to a fighter. Returns the new position.
-    /// Does not commit position — caller updates FighterInstance after both moves are processed
-    /// to handle collision/blocking correctly.
+    /// Does not commit position — caller updates FighterInstance after both moves.
     /// </summary>
     public static HexCoord ResolveMovement(
         FighterInstance mover,
@@ -25,50 +26,88 @@ public static class MovementEngine
         HexBoard board,
         HexCoord? chosenDestination = null)
     {
-        int movement = mover.GetCardMovement(pair.Generic!) + (pair.Unique?.BaseMovement ?? pair.Special?.BaseMovement ?? 0);
+        int movement = mover.GetCardMovement(pair.Generic ?? (CardBase?)pair.Special ?? pair.Generic!)
+            + (pair.Unique?.BaseMovement ?? pair.Special?.BaseMovement ?? 0);
 
-        if (movement <= 0) return currentPos;
+        var movementType = pair.CombinedMovementType;
 
-        // If player chose a destination explicitly, use it if valid
+        if (movement <= 0 || movementType == MovementType.None) return currentPos;
+
+        // Free movement: player chooses; fall back to auto-approach if no choice given
+        if (movementType == MovementType.Free)
+        {
+            if (chosenDestination.HasValue)
+            {
+                var dest = chosenDestination.Value;
+                if (board.IsValid(dest) && !board.IsOccupied(dest) && dest != opponentPos)
+                    return dest;
+            }
+            // Auto: move toward opponent
+            return BestCandidate(currentPos, opponentPos, movement, approachTarget: true, board);
+        }
+
+        bool approaching = movementType == MovementType.Approach;
+
+        // For explicit player choice on Approach/Retreat, validate direction intent
         if (chosenDestination.HasValue)
         {
             var dest = chosenDestination.Value;
             if (board.IsValid(dest) && !board.IsOccupied(dest) && dest != opponentPos)
-                return dest;
-            // Chosen hex is blocked (e.g. opponent moved there) — fall through to auto-move
+            {
+                int currentDist = currentPos.DistanceTo(opponentPos);
+                int destDist = dest.DistanceTo(opponentPos);
+                bool goesBetter = approaching ? destDist <= currentDist : destDist >= currentDist;
+                if (goesBetter)
+                    return dest;
+            }
+            // Chosen hex doesn't match movement intent — fall through to auto
         }
 
-        // Determine direction: default is toward opponent unless Retreat keyword present
-        bool retreating = pair.AllKeywords.ContainsKeyword(CardKeyword.Retreat);
-        HexCoord direction = retreating
-            ? currentPos - opponentPos
-            : opponentPos - currentPos;
-
-        // Normalize direction to one step
-        int dist = currentPos.DistanceTo(opponentPos);
-        if (dist == 0) return currentPos;
-
-        var candidates = GetMovementCandidates(currentPos, movement, opponentPos, retreating, board);
-
-        // Pick best candidate: closest to opponent (or farthest if retreating)
-        if (candidates.Count == 0) return currentPos;
-
-        HexCoord best = retreating
-            ? candidates.OrderByDescending(c => c.DistanceTo(opponentPos)).First()
-            : candidates.OrderBy(c => c.DistanceTo(opponentPos)).First();
-
-        // Cannot move onto opponent's hex
-        if (best == opponentPos) best = currentPos;
-
-        return best;
+        return BestCandidate(currentPos, opponentPos, movement, approaching, board);
     }
 
-    private static List<HexCoord> GetMovementCandidates(
-        HexCoord origin, int steps, HexCoord target, bool retreating, HexBoard board)
+    /// <summary>Computes all reachable hexes within range and picks closest (approach) or farthest (retreat).</summary>
+    private static HexCoord BestCandidate(
+        HexCoord origin, HexCoord opponentPos, int steps, bool approachTarget, HexBoard board)
     {
-        var reachable = HexMath.ReachableHexes(origin, steps, board);
-        // Remove opponent hex
-        reachable.Remove(target);
-        return reachable;
+        var candidates = HexMath.ReachableHexes(origin, steps, board);
+        candidates.Remove(opponentPos);
+        if (candidates.Count == 0) return origin;
+
+        return approachTarget
+            ? candidates.OrderBy(c => c.DistanceTo(opponentPos)).First()
+            : candidates.OrderByDescending(c => c.DistanceTo(opponentPos)).First();
+    }
+
+    /// <summary>
+    /// Returns all hexes a fighter can legally reach given this pair's movement and type.
+    /// Used by FightScreen to highlight valid destination choices for Free movement.
+    /// </summary>
+    public static List<HexCoord> GetReachableHexes(
+        FighterInstance mover,
+        CardPair pair,
+        HexCoord currentPos,
+        HexCoord opponentPos,
+        HexBoard board)
+    {
+        int movement = mover.GetCardMovement(pair.Generic ?? (CardBase?)pair.Special ?? pair.Generic!)
+            + (pair.Unique?.BaseMovement ?? pair.Special?.BaseMovement ?? 0);
+
+        var movementType = pair.CombinedMovementType;
+
+        if (movement <= 0 || movementType == MovementType.None)
+            return new List<HexCoord>();
+
+        var all = HexMath.ReachableHexes(currentPos, movement, board);
+        all.Remove(opponentPos);
+
+        int currentDist = currentPos.DistanceTo(opponentPos);
+
+        return movementType switch
+        {
+            MovementType.Approach => all.Where(c => c.DistanceTo(opponentPos) <= currentDist).ToList(),
+            MovementType.Retreat  => all.Where(c => c.DistanceTo(opponentPos) >= currentDist).ToList(),
+            _                     => all, // Free
+        };
     }
 }
