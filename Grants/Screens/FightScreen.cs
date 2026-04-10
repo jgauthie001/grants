@@ -324,6 +324,7 @@ public class FightScreen : GameScreen
             DrawBoard(sb);
             DrawDamageStates(sb);
             DrawCardSelection(sb);
+            DrawOpponentCards(sb);
             DrawRoundLog(sb);
 
             if (_match.Phase == MatchPhase.MatchOver)
@@ -397,6 +398,60 @@ public class FightScreen : GameScreen
             sb.DrawString(_smallFont, $"Dist to opponent: {previewDist}", new Vector2(BoardOriginX - 220, BoardOriginY + 184), Color.LightCyan);
             sb.DrawString(_smallFont, "[Left/Right] Cycle  [Enter] Confirm  [Esc] Stay",
                 new Vector2(BoardOriginX - 180, BoardOriginY + 210), Color.DimGray);
+        }
+    }
+
+    private void DrawOpponentCards(SpriteBatch sb)
+    {
+        var opp = _match.FighterB;
+        int x = 820, y = 200;
+
+        sb.DrawString(_font, "Opponent Cards", new Vector2(x, y), Color.LightGray);
+        y += 24;
+
+        // Generic cards — color by body location damage state
+        sb.DrawString(_smallFont, "Body:", new Vector2(x, y), Color.DimGray);
+        y += 16;
+        foreach (var card in opp.Definition.GenericCards)
+        {
+            var loc = Models.Fighter.FighterInstance.BodyPartToLocation(card.BodyPart);
+            var state = opp.LocationStates[loc].State;
+            int cd = opp.GetCooldown(card.Id);
+            Color c = state switch
+            {
+                Models.Fighter.DamageState.Disabled => Color.Red,
+                Models.Fighter.DamageState.Injured  => Color.Orange,
+                Models.Fighter.DamageState.Bruised  => Color.Yellow,
+                _                                   => cd > 0 ? new Color(100, 100, 100) : Color.LightGray,
+            };
+            string cdStr = cd > 0 ? $" [CD:{cd}]" : "";
+            string stateStr = state != Models.Fighter.DamageState.Healthy ? $" [{state}]" : "";
+            sb.DrawString(_smallFont, $"  {card.Name}{stateStr}{cdStr}", new Vector2(x, y), c);
+            y += 16;
+        }
+
+        y += 6;
+
+        // Unique cards — color by cooldown
+        sb.DrawString(_smallFont, "Moves:", new Vector2(x, y), Color.DimGray);
+        y += 16;
+        foreach (var card in opp.Definition.UniqueCards)
+        {
+            int cd = opp.GetCooldown(card.Id);
+            Color c = cd > 0 ? new Color(100, 100, 100) : Color.LightGray;
+            string cdStr = cd > 0 ? $" [CD:{cd}]" : "";
+            sb.DrawString(_smallFont, $"  {card.Name}{cdStr}", new Vector2(x, y), c);
+            y += 16;
+        }
+
+        // Special cards
+        foreach (var card in opp.Definition.SpecialCards)
+        {
+            int cd = opp.GetCooldown(card.Id);
+            Color c = cd > 0 ? new Color(100, 100, 100) : Color.LightGray;
+            string cdStr = cd > 0 ? $" [CD:{cd}]" : "";
+            sb.DrawString(_smallFont, $"  {card.Name}{cdStr}", new Vector2(x, y), c);
+            y += 16;
         }
     }
 
