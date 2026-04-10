@@ -466,6 +466,27 @@ public class FightScreen : GameScreen
 
             sb.DrawString(_smallFont, "[Up/Down] Navigate   [Enter] Select",
                 new Vector2(panelX, panelY + 24 + _validGenerics.Count * 18 + 8), Color.DimGray);
+
+            // Show disabled/on-cooldown generics so player can see what they've lost
+            var disabledGenerics = _match.FighterA.Definition.GenericCards
+                .Where(c => !_validGenerics.Contains(c))
+                .ToList();
+            if (disabledGenerics.Count > 0)
+            {
+                int offsetY = panelY + 24 + _validGenerics.Count * 18 + 30;
+                sb.DrawString(_smallFont, "Unavailable:", new Vector2(panelX, offsetY), Color.DimGray);
+                offsetY += 16;
+                foreach (var card in disabledGenerics)
+                {
+                    var loc = Models.Fighter.FighterInstance.BodyPartToLocation(card.BodyPart);
+                    bool isDisabled = _match.FighterA.LocationStates[loc].State == Models.Fighter.DamageState.Disabled;
+                    int cd = _match.FighterA.GetCooldown(card.Id);
+                    string reason = isDisabled ? "[DISABLED]" : $"[CD:{cd}]";
+                    Color dimColor = isDisabled ? new Color(180, 40, 40) : new Color(100, 100, 100);
+                    sb.DrawString(_smallFont, $"  {card.Name} {reason}", new Vector2(panelX, offsetY), dimColor);
+                    offsetY += 16;
+                }
+            }
         }
         else
         {
@@ -512,6 +533,22 @@ public class FightScreen : GameScreen
 
             sb.DrawString(_smallFont, "[Up/Down] Navigate   [Enter] Commit   [Backspace] Back",
                 new Vector2(panelX, panelY + 24 + _validUniques.Count * 18 + 8), Color.DimGray);
+
+            // Show on-cooldown uniques so player sees what isn't available
+            var unavailableUniques = _match.FighterA.Definition.UniqueCards
+                .Where(u => !_validUniques.Contains(u) && _match.FighterA.GetCooldown(u.Id) > 0)
+                .ToList();
+            if (unavailableUniques.Count > 0)
+            {
+                int offsetY = panelY + 24 + _validUniques.Count * 18 + 30;
+                foreach (var u in unavailableUniques)
+                {
+                    int cd = _match.FighterA.GetCooldown(u.Id);
+                    sb.DrawString(_smallFont, $"  {u.Name} [CD:{cd}]",
+                        new Vector2(panelX, offsetY), new Color(100, 100, 100));
+                    offsetY += 16;
+                }
+            }
         }
     }
 
