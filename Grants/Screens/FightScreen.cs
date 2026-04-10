@@ -663,7 +663,49 @@ public class FightScreen : GameScreen
     // so we draw a filled square as placeholder for now
     private void DrawHex(SpriteBatch sb, int cx, int cy, int size, Color color)
     {
-        sb.Draw(_pixel, new Rectangle(cx - size / 2, cy - size / 2, size, size), color * 0.6f);
+        // Pointy-top hexagon filled via horizontal scanlines.
+        // 6 vertices at 30°, 90°, 150°, 210°, 270°, 330° from center.
+        // For each scanline row, compute left/right X edges from the hex boundary.
+        float r = size;
+        float h = r;          // half-height = r (pointy-top: top vertex at cy - r)
+        float w = r * 0.866f; // half-width  = r * sin(60°)
+
+        // The hex has 3 zones (top-to-bottom for pointy-top):
+        //   Zone A: cy-r  to  cy-r/2   — top triangle (narrows as y increases, width = 2w*(y-top)/(r/2))
+        //   Zone B: cy-r/2 to cy+r/2  — rectangular band (full width = 2w)
+        //   Zone C: cy+r/2 to cy+r    — bottom triangle (narrows, width = 2w*(bottom-y)/(r/2))
+
+        float alpha = color.A / 255f * 0.85f;
+        Color c = color * alpha;
+
+        int yTop    = (int)(cy - h);
+        int yMidTop = (int)(cy - h / 2f);
+        int yMidBot = (int)(cy + h / 2f);
+        int yBot    = (int)(cy + h);
+
+        for (int row = yTop; row <= yBot; row++)
+        {
+            float halfW;
+            if (row <= yMidTop) // top triangle zone
+            {
+                float t = (float)(row - yTop) / (yMidTop - yTop + 1);
+                halfW = w * t;
+            }
+            else if (row <= yMidBot) // middle band
+            {
+                halfW = w;
+            }
+            else // bottom triangle zone
+            {
+                float t = (float)(yBot - row) / (yBot - yMidBot + 1);
+                halfW = w * t;
+            }
+
+            int x0 = (int)(cx - halfW);
+            int x1 = (int)(cx + halfW);
+            int width = Math.Max(1, x1 - x0);
+            sb.Draw(_pixel, new Rectangle(x0, row, width, 1), c);
+        }
     }
 
     private static bool IsPressed(KeyboardState cur, KeyboardState prev, Keys key) =>

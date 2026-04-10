@@ -6,12 +6,11 @@
   - `Fighters/Grants/GrantsFighter.cs` — card names, descriptions
   - `Fighters/Grants/GrantsUpgradeTree.cs` — node names, descriptions, item flavor
   - Screen strings: "Select your move", "Victory!", "Defeat!", "Round Log:", etc.
-- [ ] Test run: `dotnet run --project Grants/Grants.csproj`
-  - Verify font loading works on target machine
-  - Verify profile save/load round-trips correctly
-- [ ] Hex board rendering: replace placeholder filled-square `DrawHex` with
-  actual hexagon shape (6-sided polygon or pre-made texture)
-- [ ] Add range display to CharacterBuilderScreen — show MinRange/MaxRange on unique/special cards
+- [x] Test run: `dotnet run --project Grants/Grants.csproj`
+  - Font loading verified working
+  - Profile save/load verified working (`%LOCALAPPDATA%\Grants\Saves\`)
+- [x] Hex board rendering: real pointy-top hexagon shape (scanline fill)
+- [x] Add range display to CharacterBuilderScreen — MinRange/MaxRange editable for unique/special, MinRangeMod/MaxRangeMod for generic
 
 ## Gameplay
 

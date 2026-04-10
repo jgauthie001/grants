@@ -31,10 +31,10 @@ public class UniqueCard : CardBase
     /// <summary>
     /// Minimum range in hexes. Attack can hit opponents at least this far away.
     /// </summary>
-    public int MinRange { get; init; } = 1;
+    public int MinRange { get; set; } = 1;
 
     /// <summary>
     /// Maximum range in hexes. Attack cannot hit opponents farther than this.
     /// </summary>
-    public int MaxRange { get; init; } = 1;
+    public int MaxRange { get; set; } = 1;
 }

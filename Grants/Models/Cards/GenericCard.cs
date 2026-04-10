@@ -36,7 +36,7 @@ public class GenericCard : CardBase
     /// -1 means minimum range is reduced by 1 (e.g., 2→1, requires getting closer)
     /// +1 means minimum range is increased by 1 (e.g., works from farther away)
     /// </summary>
-    public int MinRangeModifier { get; init; } = 0;
+    public int MinRangeModifier { get; set; } = 0;
 
     /// <summary>
     /// Modifier applied to the maximum range of the paired unique/special card.
@@ -44,5 +44,5 @@ public class GenericCard : CardBase
     /// -1 means maximum range is reduced by 1 (e.g., 3→2, shorter reach)
     /// +1 means maximum range is increased by 1 (e.g., 3→4, extended reach)
     /// </summary>
-    public int MaxRangeModifier { get; init; } = 0;
+    public int MaxRangeModifier { get; set; } = 0;
 }

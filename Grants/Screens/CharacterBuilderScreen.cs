@@ -31,9 +31,16 @@ public class CharacterBuilderScreen : GameScreen
     private int _cardIndex = 0;
     private CardBase? _selectedCard = null;
 
-    // Stat editing state
-    private string[] _editableStats = { "Power", "Defense", "Speed", "Movement", "Cooldown", "Name", "Keywords", "Upgrades" };
+    // Stat editing state — base 8 stats always present; range stats appended for unique/special/generic
+    private string[] _editableStats = { "Power", "Defense", "Speed", "Movement", "Cooldown", "Name", "Keywords", "Upgrades", "MinRange", "MaxRange" };
     private int _statIndex = 0;
+
+    private int StatCount => _selectedCard switch
+    {
+        UniqueCard or SpecialCard => 10, // +MinRange, +MaxRange
+        GenericCard               => 10, // +MinRangeMod, +MaxRangeMod
+        _                         => 8,
+    };
 
     // Keyword editing
     private CardKeywordValue? _editingKeyword = null;
@@ -259,13 +266,13 @@ public class CharacterBuilderScreen : GameScreen
     private void UpdateStatEdit(KeyboardState keys)
     {
         if (IsPressed(keys, _prevKeys, Keys.Up) || IsPressed(keys, _prevKeys, Keys.W))
-            _statIndex = (_statIndex - 1 + _editableStats.Length) % _editableStats.Length;
+            _statIndex = (_statIndex - 1 + StatCount) % StatCount;
 
         if (IsPressed(keys, _prevKeys, Keys.Down) || IsPressed(keys, _prevKeys, Keys.S))
-            _statIndex = (_statIndex + 1) % _editableStats.Length;
+            _statIndex = (_statIndex + 1) % StatCount;
 
-        // Modify numeric stat values
-        if (_statIndex < 5)
+        // Modify numeric stat values (0-4 base stats, 8-9 range stats)
+        if (_statIndex < 5 || _statIndex >= 8)
         {
             if (IsPressed(keys, _prevKeys, Keys.Right) || IsPressed(keys, _prevKeys, Keys.D))
                 ModifyStat(1);
@@ -485,6 +492,17 @@ public class CharacterBuilderScreen : GameScreen
             case 2: _selectedCard.BaseSpeed = _selectedCard.BaseSpeed + delta; break;
             case 3: _selectedCard.MaxMovement = Math.Max(0, _selectedCard.MaxMovement + delta); break;
             case 4: _selectedCard.BaseCooldown = Math.Max(1, _selectedCard.BaseCooldown + delta); break;
+            // indices 5-7: Name, Keywords, Upgrades — no numeric adjustment
+            case 8:
+                if (_selectedCard is UniqueCard u8)  u8.MinRange  = Math.Max(1, u8.MinRange  + delta);
+                else if (_selectedCard is SpecialCard s8) s8.MinRange = Math.Max(1, s8.MinRange + delta);
+                else if (_selectedCard is GenericCard g8) g8.MinRangeModifier = g8.MinRangeModifier + delta;
+                break;
+            case 9:
+                if (_selectedCard is UniqueCard u9)  u9.MaxRange  = Math.Max(1, u9.MaxRange  + delta);
+                else if (_selectedCard is SpecialCard s9) s9.MaxRange = Math.Max(1, s9.MaxRange + delta);
+                else if (_selectedCard is GenericCard g9) g9.MaxRangeModifier = g9.MaxRangeModifier + delta;
+                break;
         }
     }
 
@@ -618,28 +636,46 @@ public class CharacterBuilderScreen : GameScreen
             ? "configured"
             : "not configured";
 
-        var stats = new[]
+        var stats = new System.Collections.Generic.List<(string, string)>
         {
-            ("Power", _selectedCard.BasePower.ToString()),
-            ("Defense", _selectedCard.BaseDefense.ToString()),
-            ("Speed", _selectedCard.BaseSpeed.ToString()),
+            ("Power",    _selectedCard.BasePower.ToString()),
+            ("Defense",  _selectedCard.BaseDefense.ToString()),
+            ("Speed",    _selectedCard.BaseSpeed.ToString()),
             ("Movement", _selectedCard.MaxMovement.ToString()),
             ("Cooldown", _selectedCard.BaseCooldown.ToString()),
-            ("Name", _selectedCard.Name),
+            ("Name",     _selectedCard.Name),
             ("Keywords", _selectedCard.Keywords.Count + " added"),
             ("Upgrades", upgradeSummary),
         };
 
-        for (int i = 0; i < stats.Length; i++)
+        // Range rows — type-specific
+        switch (_selectedCard)
+        {
+            case UniqueCard u:
+                stats.Add(("MinRange", u.MinRange.ToString()));
+                stats.Add(("MaxRange", u.MaxRange.ToString()));
+                break;
+            case SpecialCard sp:
+                stats.Add(("MinRange", sp.MinRange.ToString()));
+                stats.Add(("MaxRange", sp.MaxRange.ToString()));
+                break;
+            case GenericCard g:
+                stats.Add(("MinRangeMod", g.MinRangeModifier.ToString("+#;-#;0")));
+                stats.Add(("MaxRangeMod", g.MaxRangeModifier.ToString("+#;-#;0")));
+                break;
+        }
+
+        for (int i = 0; i < stats.Count; i++)
         {
             bool sel = i == _statIndex;
             Color c = sel ? Color.Yellow : Color.LightGray;
-            string arrow = (sel && i < 5) ? " <>" : "";
+            bool isAdjustable = i < 5 || i >= 8;
+            string arrow = (sel && isAdjustable) ? " <>" : "";
             string label = $"{(sel ? ">" : " ")} {stats[i].Item1}: {stats[i].Item2}{arrow}";
             sb.DrawString(_smallFont, label, new Vector2(x, y + i * 25), c);
         }
 
-        y += stats.Length * 25 + 30;
+        y += stats.Count * 25 + 30;
         sb.DrawString(_smallFont, "[Up/Down] Select   [Left/Right] Adjust   [Enter] Edit   [Backspace] Back", new Vector2(x, y), Color.DimGray);
     }
 
