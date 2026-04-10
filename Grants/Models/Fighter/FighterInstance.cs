@@ -146,7 +146,7 @@ public class FighterInstance
         + (UpgradedCardSpeed.TryGetValue(card.Id, out int s) ? s : 0);
 
     public int GetCardMovement(CardBase card) =>
-        card.BaseMovement + (UpgradedCardMovement.TryGetValue(card.Id, out int m) ? m : 0);
+        card.MaxMovement + (UpgradedCardMovement.TryGetValue(card.Id, out int m) ? m : 0);
 
     public int GetCardCooldown(CardBase card)
     {

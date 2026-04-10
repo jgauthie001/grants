@@ -55,7 +55,8 @@ public abstract class CardBase
     public int BasePower { get; set; }
     public int BaseDefense { get; set; }
     public int BaseSpeed { get; set; }       // -2 to +3
-    public int BaseMovement { get; set; }    // Hexes moved when this card is used
+    public int MinMovement { get; set; }     // Minimum hexes required to move (0 = movement is optional)
+    public int MaxMovement { get; set; }     // Maximum hexes that can be moved
     public MovementType BaseMovementType { get; set; } = MovementType.None;
 
     // Keywords on this card (base set — upgrades may add keywords)

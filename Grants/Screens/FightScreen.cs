@@ -43,7 +43,8 @@ public class FightScreen : GameScreen
     // Movement selection state
     private bool _awaitingMovement = false;
     private List<Models.Board.HexCoord> _validMoveHexes = new();
-    private int _moveSelectionIndex = 0; // 0 = stay put, 1+ = index into _validMoveHexes
+    private int _moveSelectionIndex = 0; // 0 = stay put (only when _moveForcedMin == 0); 1+ = index into _validMoveHexes
+    private int _moveForcedMin = 0;      // > 0 means player cannot stay put; index starts at 1
 
     // Tooltip tracking
     private CardBase? _hoveredCard = null;
@@ -172,10 +173,20 @@ public class FightScreen : GameScreen
             else if (_match.Phase == MatchPhase.CardSelection && _awaitingMovement)
             {
                 // Movement destination selection
+                // When _moveForcedMin > 0: index 1..N only (no stay-put); otherwise 0..N (0 = stay put)
+                int minIdx = _moveForcedMin > 0 ? 1 : 0;
+                int totalOpts = _validMoveHexes.Count + 1; // slot 0 always exists for stay-put math; unused if forced
+
                 if (IsPressed(keys, _prevKeys, Keys.Right) || IsPressed(keys, _prevKeys, Keys.D) || IsPressed(keys, _prevKeys, Keys.Tab))
-                    _moveSelectionIndex = (_moveSelectionIndex + 1) % (_validMoveHexes.Count + 1);
+                {
+                    _moveSelectionIndex++;
+                    if (_moveSelectionIndex >= totalOpts) _moveSelectionIndex = minIdx;
+                }
                 if (IsPressed(keys, _prevKeys, Keys.Left) || IsPressed(keys, _prevKeys, Keys.A))
-                    _moveSelectionIndex = (_moveSelectionIndex - 1 + _validMoveHexes.Count + 1) % (_validMoveHexes.Count + 1);
+                {
+                    _moveSelectionIndex--;
+                    if (_moveSelectionIndex < minIdx) _moveSelectionIndex = totalOpts - 1;
+                }
 
                 if (IsPressed(keys, _prevKeys, Keys.Enter) || IsPressed(keys, _prevKeys, Keys.Space))
                 {
@@ -186,7 +197,10 @@ public class FightScreen : GameScreen
 
                 if (IsPressed(keys, _prevKeys, Keys.Escape))
                 {
-                    _match.ChosenMoveA = null;
+                    // Forced movement: can't cancel — use first valid hex
+                    _match.ChosenMoveA = _moveForcedMin > 0 && _validMoveHexes.Count > 0
+                        ? _validMoveHexes[0]
+                        : null;
                     _awaitingMovement = false;
                     ExecuteRound();
                 }
@@ -259,17 +273,26 @@ public class FightScreen : GameScreen
         _validUniques.Clear();
 
         // Check if this pair grants movement — if so, let player choose destination
-        int movement = _match.FighterA.GetCardMovement(pair.Generic!)
-            + (pair.Unique?.BaseMovement ?? pair.Special?.BaseMovement ?? 0);
+        int maxMovement = _match.FighterA.GetCardMovement(pair.Generic!)
+            + _match.FighterA.GetCardMovement(pair.Unique ?? (Models.Cards.CardBase?)pair.Special ?? pair.Generic!);
+        int minMovement = pair.EffectiveMinMovement;
 
-        if (movement > 0)
+        if (maxMovement > 0)
         {
             var pos = new Models.Board.HexCoord(_match.FighterA.HexQ, _match.FighterA.HexR);
             var oppPos = new Models.Board.HexCoord(_match.FighterB.HexQ, _match.FighterB.HexR);
             _match.Board.SetOccupied(oppPos, true);
             _validMoveHexes = Engine.MovementEngine.GetReachableHexes(_match.FighterA, pair, pos, oppPos, _match.Board);
             _match.Board.SetOccupied(oppPos, false);
-            _moveSelectionIndex = 0; // 0 = stay put
+            _moveForcedMin = minMovement;
+            // If forced movement and no valid hexes exist, just execute immediately
+            if (_moveForcedMin > 0 && _validMoveHexes.Count == 0)
+            {
+                _match.ChosenMoveA = null;
+                ExecuteRound();
+                return;
+            }
+            _moveSelectionIndex = _moveForcedMin > 0 ? 1 : 0;
             _awaitingMovement = true;
         }
         else
@@ -427,7 +450,17 @@ public class FightScreen : GameScreen
                 var card = _validGenerics[i];
                 bool sel = i == _genericSelectionIndex;
                 Color c = sel ? Color.Yellow : Color.LightGray;
-                string label = $"{(sel ? ">" : " ")} {card.Name}  [Spd:{card.BaseSpeed:+#;-#;0} Pwr:{card.BasePower} Def:{card.BaseDefense} Mv:{card.BaseMovement}]";
+                string mvTypeG = card.BaseMovementType switch
+                {
+                    Models.Cards.MovementType.Approach => ">",
+                    Models.Cards.MovementType.Retreat  => "<",
+                    Models.Cards.MovementType.Free     => "*",
+                    _                                  => "-",
+                };
+                string mvStrG = card.MaxMovement == 0 ? "-" :
+                    card.MinMovement == card.MaxMovement ? $"{mvTypeG}{card.MaxMovement}" :
+                    $"{mvTypeG}{card.MinMovement}-{card.MaxMovement}";
+                string label = $"{(sel ? ">" : " ")} {card.Name}  [Spd:{card.BaseSpeed:+#;-#;0} Pwr:{card.BasePower} Def:{card.BaseDefense} Mv:{mvStrG}]";
                 sb.DrawString(_smallFont, label, new Vector2(panelX, panelY + 24 + i * 18), c);
             }
 
@@ -460,7 +493,9 @@ public class FightScreen : GameScreen
                 // Compute effective range and combined movement for this pair
                 var tempPair = new CardPair { Generic = _selectedGeneric, Unique = card as UniqueCard, Special = card as SpecialCard };
                 string rangeStr = $"{tempPair.EffectiveMinRange}-{tempPair.EffectiveMaxRange}";
-                int combinedMv = _match.FighterA.GetCardMovement(_selectedGeneric!) + card.BaseMovement;
+                int combinedMinMv = tempPair.EffectiveMinMovement;
+                int combinedMaxMv = _match.FighterA.GetCardMovement(_selectedGeneric!)
+                    + _match.FighterA.GetCardMovement(card);
                 string mvType = tempPair.CombinedMovementType switch
                 {
                     Models.Cards.MovementType.Approach => ">",
@@ -468,7 +503,10 @@ public class FightScreen : GameScreen
                     Models.Cards.MovementType.Free     => "*",
                     _                                  => "-",
                 };
-                string label = $"{(sel ? ">" : " ")} {cardName}  [Spd:{card.BaseSpeed:+#;-#;0} Pwr:{card.BasePower} Def:{card.BaseDefense} Mv:{mvType}{combinedMv} Rng:{rangeStr}]";
+                string mvStr = combinedMaxMv == 0 ? "-" :
+                    combinedMinMv == combinedMaxMv ? $"{mvType}{combinedMaxMv}" :
+                    $"{mvType}{combinedMinMv}-{combinedMaxMv}";
+                string label = $"{(sel ? ">" : " ")} {cardName}  [Spd:{card.BaseSpeed:+#;-#;0} Pwr:{card.BasePower} Def:{card.BaseDefense} Mv:{mvStr} Rng:{rangeStr}]";
                 sb.DrawString(_smallFont, label, new Vector2(panelX, panelY + 24 + i * 18), c);
             }
 

@@ -50,10 +50,26 @@ public static class CardTooltip
         $"Power: {card.BasePower:+#;-#;0}",
         $"Defense: {card.BaseDefense:+#;-#;0}",
         $"Speed: {card.BaseSpeed:+#;-#;0}",
-        $"Movement: {card.BaseMovement} hex",
+        $"Movement: {GetMovementDisplay(card)}",
         $"Range: {GetRangeDisplay(card)}",
         $"Cooldown: {card.BaseCooldown} turn" + (card.BaseCooldown != 1 ? "s" : ""),
     };
+
+    /// <summary>Get movement display for this card type.</summary>
+    private static string GetMovementDisplay(CardBase card)
+    {
+        if (card.MaxMovement == 0) return "None";
+        string type = card.BaseMovementType switch
+        {
+            MovementType.Approach => ">",
+            MovementType.Retreat  => "<",
+            MovementType.Free     => "*",
+            _                     => "-",
+        };
+        return card.MinMovement == card.MaxMovement
+            ? $"{type}{card.MaxMovement} hex"
+            : $"{type}{card.MinMovement}-{card.MaxMovement} hex";
+    }
 
     /// <summary>Get range display for this card type.</summary>
     private static string GetRangeDisplay(CardBase card) => card switch

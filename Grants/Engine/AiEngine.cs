@@ -32,7 +32,7 @@ public static class AiEngine
         if (!anyInRange)
         {
             // Pick pair with most movement
-            return validPairs.OrderByDescending(p => p.CombinedMovement).First();
+            return validPairs.OrderByDescending(p => p.EffectiveMaxMovement).First();
         }
 
         // Among in-range pairs, pick highest power

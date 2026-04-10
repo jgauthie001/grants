@@ -483,7 +483,7 @@ public class CharacterBuilderScreen : GameScreen
             case 0: _selectedCard.BasePower = Math.Max(0, _selectedCard.BasePower + delta); break;
             case 1: _selectedCard.BaseDefense = Math.Max(0, _selectedCard.BaseDefense + delta); break;
             case 2: _selectedCard.BaseSpeed = _selectedCard.BaseSpeed + delta; break;
-            case 3: _selectedCard.BaseMovement = Math.Max(0, _selectedCard.BaseMovement + delta); break;
+            case 3: _selectedCard.MaxMovement = Math.Max(0, _selectedCard.MaxMovement + delta); break;
             case 4: _selectedCard.BaseCooldown = Math.Max(1, _selectedCard.BaseCooldown + delta); break;
         }
     }
@@ -623,7 +623,7 @@ public class CharacterBuilderScreen : GameScreen
             ("Power", _selectedCard.BasePower.ToString()),
             ("Defense", _selectedCard.BaseDefense.ToString()),
             ("Speed", _selectedCard.BaseSpeed.ToString()),
-            ("Movement", _selectedCard.BaseMovement.ToString()),
+            ("Movement", _selectedCard.MaxMovement.ToString()),
             ("Cooldown", _selectedCard.BaseCooldown.ToString()),
             ("Name", _selectedCard.Name),
             ("Keywords", _selectedCard.Keywords.Count + " added"),
@@ -769,7 +769,7 @@ public class CharacterBuilderScreen : GameScreen
         else if (upgrade.Type == CardUpgradeType.SpeedBonus)
             card.BaseSpeed += upgrade.StatBonus;
         else if (upgrade.Type == CardUpgradeType.MovementBonus)
-            card.BaseMovement += upgrade.StatBonus;
+            card.MaxMovement += upgrade.StatBonus;
         else if (upgrade.Type == CardUpgradeType.CooldownReduction)
             card.BaseCooldown = Math.Max(1, card.BaseCooldown + upgrade.StatBonus);
         else if (upgrade.Type == CardUpgradeType.AddKeyword && upgrade.KeywordToAdd != CardKeyword.None)

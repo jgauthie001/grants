@@ -27,9 +27,20 @@ public class CardPair
     public int CombinedDefense =>
         (Generic?.BaseDefense ?? 0) + (Unique?.BaseDefense ?? Special?.BaseDefense ?? 0);
 
-    /// <summary>Movement hexes this action grants.</summary>
-    public int CombinedMovement =>
-        (Generic?.BaseMovement ?? 0) + (Unique?.BaseMovement ?? Special?.BaseMovement ?? 0);
+    /// <summary>
+    /// Minimum hexes this action requires to move (0 = movement is optional).
+    /// Sums both cards' MinMovement values.
+    /// </summary>
+    public int EffectiveMinMovement =>
+        Math.Max(0, (Generic?.MinMovement ?? 0) + (Unique?.MinMovement ?? Special?.MinMovement ?? 0));
+
+    /// <summary>
+    /// Maximum hexes this action can move (not accounting for per-fighter upgrade bonuses).
+    /// Sums both cards' MaxMovement values.
+    /// Use FighterInstance.GetCardMovement() when upgrade bonuses matter.
+    /// </summary>
+    public int EffectiveMaxMovement =>
+        (Generic?.MaxMovement ?? 0) + (Unique?.MaxMovement ?? Special?.MaxMovement ?? 0);
 
     /// <summary>
     /// Movement type for this pair. The unique/special card's type takes priority
