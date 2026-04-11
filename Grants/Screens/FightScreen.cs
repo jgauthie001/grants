@@ -35,6 +35,16 @@ public class FightScreen : GameScreen
     private List<CardBase> _validUniques = new();  // Unique or Special cards
     private int _uniqueSelectionIndex = 0;
 
+    // Local PvP
+    private bool _isLocalPvP = false;
+    private enum LocalPvpPhase { NotApplicable, P1Selecting, PassToP2, P2Selecting }
+    private LocalPvpPhase _pvpPhase = LocalPvpPhase.NotApplicable;
+    private GenericCard? _p2SelectedGeneric = null;
+    private List<GenericCard> _p2ValidGenerics = new();
+    private int _p2GenericIndex = 0;
+    private List<CardBase> _p2ValidUniques = new();
+    private int _p2UniqueIndex = 0;
+
     // Round log for display
     private List<string> _roundLog = new();
     private KeyboardState _prevKeys;
@@ -61,32 +71,56 @@ public class FightScreen : GameScreen
         _smallFont = Game.SmallFont;
         _pixel = Game.Pixel;
 
-        var (fighterDef, matchType) = ((FighterDefinition, string))data!;
-        _matchType = matchType;
+        FighterDefinition fighterDefA;
+        FighterDefinition fighterDefB;
+
+        if (data is ValueTuple<FighterDefinition, FighterDefinition, string> localPvp)
+        {
+            _isLocalPvP = true;
+            (fighterDefA, fighterDefB, _matchType) = localPvp;
+        }
+        else
+        {
+            _isLocalPvP = false;
+            var (fighterDef, matchType) = ((FighterDefinition, string))data!;
+            fighterDefA = fighterDef;
+            fighterDefB = GrantsFighter.CreateDefinition();
+            _matchType = matchType;
+        }
 
         // Create fighter instances
-        var playerFighter = new FighterInstance(fighterDef, "Player");
-        var aiFighter = new FighterInstance(GrantsFighter.CreateDefinition(), "CPU Grants");
+        var playerFighter = new FighterInstance(fighterDefA, _isLocalPvP ? "Player 1" : "Player");
+        var p2Fighter     = new FighterInstance(fighterDefB, _isLocalPvP ? "Player 2" : "CPU Grants");
 
         // Apply upgrades from progress
-        var progress = Game.PlayerProfile.GetOrCreateProgress(fighterDef.Id);
-        var tree = GrantsUpgradeTree.Create(); // TODO: look up tree by fighter ID when multiple fighters exist
-        UpgradeEngine.ApplyProgressToInstance(playerFighter, progress, tree);
+        var progressA = Game.PlayerProfile.GetOrCreateProgress(fighterDefA.Id);
+        var treeA = GrantsUpgradeTree.Create();
+        UpgradeEngine.ApplyProgressToInstance(playerFighter, progressA, treeA);
+
+        if (!_isLocalPvP)
+        {
+            var progressB = Game.PlayerProfile.GetOrCreateProgress(fighterDefB.Id);
+            var treeB = GrantsUpgradeTree.Create();
+            UpgradeEngine.ApplyProgressToInstance(p2Fighter, progressB, treeB);
+        }
 
         _match = new MatchState
         {
             MatchType = _matchType switch
             {
-                "pve" => MatchType.PvE,
+                "pve"        => MatchType.PvE,
                 "pvp_casual" => MatchType.PvpCasual,
                 "pvp_ranked" => MatchType.PvpRanked,
-                _ => MatchType.PvE,
+                "pvp_local"  => MatchType.PvpCasual,
+                _            => MatchType.PvE,
             },
             FighterA = playerFighter,
-            FighterB = aiFighter,
+            FighterB = p2Fighter,
             FighterAIsHuman = true,
-            FighterBIsHuman = false,
+            FighterBIsHuman = _isLocalPvP,
         };
+
+        _match.StageState = _match.Stage.CreateRuntimeState();
 
         // Starting positions
         _match.FighterA.HexQ = Models.Board.HexBoard.FighterAStart.Q;
@@ -104,7 +138,7 @@ public class FightScreen : GameScreen
         _match.FighterA.TickCooldowns();
         _match.FighterB.TickCooldowns();
 
-        // Reset two-step selection
+        // Reset P1 two-step selection
         _selectedGeneric = null;
         var available = _match.FighterA.GetAvailableGenerics();
         _validGenerics = available;
@@ -112,6 +146,21 @@ public class FightScreen : GameScreen
         _uniqueSelectionIndex = 0;
         _validUniques.Clear();
         _playerCommitted = false;
+
+        // Reset P2 selection state for local PvP
+        if (_isLocalPvP)
+        {
+            _p2SelectedGeneric = null;
+            _p2ValidGenerics = _match.FighterB.GetAvailableGenerics();
+            _p2GenericIndex = 0;
+            _p2UniqueIndex = 0;
+            _p2ValidUniques.Clear();
+            _pvpPhase = LocalPvpPhase.P1Selecting;
+        }
+        else
+        {
+            _pvpPhase = LocalPvpPhase.NotApplicable;
+        }
     }
 
     public override void Update(GameTime gameTime)
@@ -175,6 +224,59 @@ public class FightScreen : GameScreen
                     }
                 }
             }
+            else if (_match.Phase == MatchPhase.CardSelection && _pvpPhase == LocalPvpPhase.PassToP2)
+            {
+                // Show "pass controller" screen; P2 confirms when ready
+                if (IsPressed(keys, _prevKeys, Keys.Enter) || IsPressed(keys, _prevKeys, Keys.Space))
+                    LoadP2AvailablePairs();
+            }
+            else if (_match.Phase == MatchPhase.CardSelection && _pvpPhase == LocalPvpPhase.P2Selecting)
+            {
+                if (_p2SelectedGeneric == null)
+                {
+                    // P2 Step 1: Select generic card
+                    if (IsPressed(keys, _prevKeys, Keys.Up) || IsPressed(keys, _prevKeys, Keys.W))
+                        _p2GenericIndex = (_p2GenericIndex - 1 + _p2ValidGenerics.Count) % _p2ValidGenerics.Count;
+
+                    if (IsPressed(keys, _prevKeys, Keys.Down) || IsPressed(keys, _prevKeys, Keys.S))
+                        _p2GenericIndex = (_p2GenericIndex + 1) % _p2ValidGenerics.Count;
+
+                    if (IsPressed(keys, _prevKeys, Keys.Enter))
+                    {
+                        if (_p2ValidGenerics.Count > 0)
+                        {
+                            _p2SelectedGeneric = _p2ValidGenerics[_p2GenericIndex];
+                            var uniques = _match.FighterB.GetAvailableUniques()
+                                .Where(u => _match.FighterB.CanPair(_p2SelectedGeneric, u))
+                                .Cast<CardBase>()
+                                .ToList();
+                            uniques.AddRange(_match.FighterB.GetAvailableSpecials()
+                                .Where(s => s.Standalone)
+                                .Cast<CardBase>());
+                            _p2ValidUniques = uniques;
+                            _p2UniqueIndex = 0;
+                        }
+                    }
+                }
+                else
+                {
+                    // P2 Step 2: Select unique/special card
+                    if (IsPressed(keys, _prevKeys, Keys.Up) || IsPressed(keys, _prevKeys, Keys.W))
+                        _p2UniqueIndex = (_p2UniqueIndex - 1 + _p2ValidUniques.Count) % _p2ValidUniques.Count;
+
+                    if (IsPressed(keys, _prevKeys, Keys.Down) || IsPressed(keys, _prevKeys, Keys.S))
+                        _p2UniqueIndex = (_p2UniqueIndex + 1) % _p2ValidUniques.Count;
+
+                    if (IsPressed(keys, _prevKeys, Keys.Enter))
+                        CommitP2Choice();
+
+                    if (IsPressed(keys, _prevKeys, Keys.Back))
+                    {
+                        _p2SelectedGeneric = null;
+                        _p2ValidUniques.Clear();
+                    }
+                }
+            }
             else if (_match.Phase == MatchPhase.CardSelection && _awaitingMovement)
             {
                 // Movement destination selection
@@ -226,6 +328,14 @@ public class FightScreen : GameScreen
                     }
                 }
             }
+            else if (_match.Phase == MatchPhase.RoundMidpoint)
+            {
+                if (IsPressed(keys, _prevKeys, Keys.Enter) || IsPressed(keys, _prevKeys, Keys.Space))
+                {
+                    ResolutionEngine.ResolveSecondHalf(_match);
+                    _roundLog = _match.CurrentRoundState!.Log.ToList();
+                }
+            }
             else if (_match.Phase == MatchPhase.RoundResult)
             {
                 if (IsPressed(keys, _prevKeys, Keys.Enter) || IsPressed(keys, _prevKeys, Keys.Space))
@@ -272,10 +382,56 @@ public class FightScreen : GameScreen
         };
 
         _match.SelectedPairA = pair;
-        _match.SelectedPairB = AiEngine.SelectPair(_match.FighterB, _match.FighterA, _match.Board);
         _playerCommitted = true;
         _selectedGeneric = null;
         _validUniques.Clear();
+
+        if (_isLocalPvP)
+        {
+            // Don't resolve yet — wait for P2 to pick
+            _pvpPhase = LocalPvpPhase.PassToP2;
+            return;
+        }
+
+        // PvE / online PvP: AI picks immediately
+        _match.SelectedPairB = AiEngine.SelectPair(_match.FighterB, _match.FighterA, _match.Board);
+
+        StartMovementOrExecute();
+    }
+
+    private void LoadP2AvailablePairs()
+    {
+        _p2SelectedGeneric = null;
+        _p2ValidGenerics = _match.FighterB.GetAvailableGenerics();
+        _p2GenericIndex = 0;
+        _p2UniqueIndex = 0;
+        _p2ValidUniques.Clear();
+        _pvpPhase = LocalPvpPhase.P2Selecting;
+    }
+
+    private void CommitP2Choice()
+    {
+        if (_p2SelectedGeneric == null || _p2ValidUniques.Count == 0) return;
+
+        var unique = _p2ValidUniques[_p2UniqueIndex];
+        var pair = new CardPair
+        {
+            Generic = _p2SelectedGeneric,
+            Unique = unique as UniqueCard,
+            Special = unique as SpecialCard,
+        };
+
+        _match.SelectedPairB = pair;
+        _p2SelectedGeneric = null;
+        _p2ValidUniques.Clear();
+        _pvpPhase = LocalPvpPhase.NotApplicable;
+
+        StartMovementOrExecute();
+    }
+
+    private void StartMovementOrExecute()
+    {
+        var pair = _match.SelectedPairA!;
 
         // Check if this pair grants movement — if so, let player choose destination
         int maxMovement = _match.FighterA.GetCardMovement(pair.Generic!)
@@ -290,7 +446,6 @@ public class FightScreen : GameScreen
             _validMoveHexes = Engine.MovementEngine.GetReachableHexes(_match.FighterA, pair, pos, oppPos, _match.Board);
             _match.Board.SetOccupied(oppPos, false);
             _moveForcedMin = minMovement;
-            // If forced movement and no valid hexes exist, just execute immediately
             if (_moveForcedMin > 0 && _validMoveHexes.Count == 0)
             {
                 _match.ChosenMoveA = null;
@@ -309,9 +464,10 @@ public class FightScreen : GameScreen
 
     private void ExecuteRound()
     {
-        var round = ResolutionEngine.ResolveRound(_match);
-        _roundLog = round.Log;
-        _match.ChosenMoveA = null;
+        var round = ResolutionEngine.ResolveFirstHalf(_match);
+        _roundLog = round.Log.ToList();
+        // If phase is RoundMidpoint, _roundLog holds the partial (first-half) log.
+        // ResolveSecondHalf will be called when the player presses Enter/Space.
     }
 
     private void HandleMatchEnd()
@@ -472,6 +628,7 @@ public class FightScreen : GameScreen
         int row = 0;
         foreach (var kvp in fighter.LocationStates)
         {
+            bool isCritical = fighter.Definition.CriticalLocations.Contains(kvp.Key);
             Color stateColor = kvp.Value.State switch
             {
                 Models.Fighter.DamageState.Healthy  => Color.LimeGreen,
@@ -480,7 +637,8 @@ public class FightScreen : GameScreen
                 Models.Fighter.DamageState.Disabled => Color.Red,
                 _ => Color.White,
             };
-            string label = $"{kvp.Key}: {kvp.Value.State}";
+            string critMark = isCritical ? "!" : " ";
+            string label = $"{critMark}{kvp.Key}: {kvp.Value.State}";
             sb.DrawString(_smallFont, label, new Vector2(x, y + 22 + row * 16), stateColor);
             row++;
         }
@@ -496,9 +654,97 @@ public class FightScreen : GameScreen
 
     private void DrawCardSelection(SpriteBatch sb)
     {
-        if (_match.Phase != MatchPhase.CardSelection || _playerCommitted) return;
+        if (_match.Phase != MatchPhase.CardSelection) return;
 
         int panelX = 20, panelY = 200;
+        int cx = Game.GraphicsDevice.Viewport.Width / 2;
+        int cy = Game.GraphicsDevice.Viewport.Height / 2;
+
+        // --- Pass-to-P2 overlay ---
+        if (_pvpPhase == LocalPvpPhase.PassToP2)
+        {
+            string msg1 = "Player 1 has chosen.";
+            string msg2 = "Pass the controller to Player 2.";
+            string msg3 = "[Enter] Ready";
+            sb.DrawString(_font,      msg1, new Vector2(cx - _font.MeasureString(msg1).X / 2,      cy - 40), Color.White);
+            sb.DrawString(_smallFont, msg2, new Vector2(cx - _smallFont.MeasureString(msg2).X / 2,  cy),      Color.LightGray);
+            sb.DrawString(_smallFont, msg3, new Vector2(cx - _smallFont.MeasureString(msg3).X / 2,  cy + 30), Color.Yellow);
+            return;
+        }
+
+        // --- P2 card selection ---
+        if (_pvpPhase == LocalPvpPhase.P2Selecting)
+        {
+            sb.DrawString(_font, "Player 2 - Choose your cards", new Vector2(panelX, panelY - 30), Color.Cyan);
+
+            if (_p2SelectedGeneric == null)
+            {
+                sb.DrawString(_font, "Select Generic Card:", new Vector2(panelX, panelY), Color.White);
+                for (int i = 0; i < _p2ValidGenerics.Count; i++)
+                {
+                    var card = _p2ValidGenerics[i];
+                    bool sel = i == _p2GenericIndex;
+                    Color c = sel ? Color.Yellow : Color.LightGray;
+                    string mvTypeG = card.BaseMovementType switch
+                    {
+                        Models.Cards.MovementType.Approach => ">",
+                        Models.Cards.MovementType.Retreat  => "<",
+                        Models.Cards.MovementType.Free     => "*",
+                        _                                  => "-",
+                    };
+                    string mvStrG = card.MaxMovement == 0 ? "-" :
+                        card.MinMovement == card.MaxMovement ? $"{mvTypeG}{card.MaxMovement}" :
+                        $"{mvTypeG}{card.MinMovement}-{card.MaxMovement}";
+                    string label = $"{(sel ? ">" : " ")} {card.Name}  [Spd:{card.BaseSpeed:+#;-#;0} Pwr:{card.BasePower} Def:{card.BaseDefense} Mv:{mvStrG}]";
+                    sb.DrawString(_smallFont, label, new Vector2(panelX, panelY + 24 + i * 18), c);
+                }
+                sb.DrawString(_smallFont, "[Up/Down] Navigate   [Enter] Select",
+                    new Vector2(panelX, panelY + 24 + _p2ValidGenerics.Count * 18 + 8), Color.DimGray);
+            }
+            else
+            {
+                var p2Defender = _match.FighterA;
+                sb.DrawString(_font, $"Select Combo for: {_p2SelectedGeneric.Name}", new Vector2(panelX, panelY), Color.Yellow);
+                if (_p2ValidUniques.Count == 0)
+                {
+                    sb.DrawString(_smallFont, "No compatible moves available", new Vector2(panelX, panelY + 30), Color.Red);
+                    sb.DrawString(_smallFont, "[Backspace] Go back", new Vector2(panelX, panelY + 50), Color.DimGray);
+                    return;
+                }
+                for (int i = 0; i < _p2ValidUniques.Count; i++)
+                {
+                    var card = _p2ValidUniques[i];
+                    bool sel = i == _p2UniqueIndex;
+                    Color c = sel ? Color.Yellow : Color.LightGray;
+                    string cardName = card switch { UniqueCard u => u.Name, SpecialCard s => s.Name, _ => "?" };
+                    var tempPair = new CardPair { Generic = _p2SelectedGeneric, Unique = card as UniqueCard, Special = card as SpecialCard };
+                    string rangeStr = $"{tempPair.EffectiveMinRange}-{tempPair.EffectiveMaxRange}";
+                    string targetStr = card switch
+                    {
+                        UniqueCard u => u.PrimaryTarget == u.SecondaryTarget ? $"{u.PrimaryTarget}" :
+                            p2Defender.LocationStates[u.PrimaryTarget].State == Models.Fighter.DamageState.Disabled
+                                ? $"[{u.PrimaryTarget}]->{u.SecondaryTarget}" : $"{u.PrimaryTarget}->{u.SecondaryTarget}",
+                        SpecialCard s => s.PrimaryTarget == s.SecondaryTarget ? $"{s.PrimaryTarget}" :
+                            p2Defender.LocationStates[s.PrimaryTarget].State == Models.Fighter.DamageState.Disabled
+                                ? $"[{s.PrimaryTarget}]->{s.SecondaryTarget}" : $"{s.PrimaryTarget}->{s.SecondaryTarget}",
+                        _ => "?",
+                    };
+                    Color targetColor = card is UniqueCard uu &&
+                        p2Defender.LocationStates[uu.PrimaryTarget].State == Models.Fighter.DamageState.Disabled
+                        ? Color.Orange : Color.LightCyan;
+                    string label = $"{(sel ? ">" : " ")} {cardName}  [Spd:{card.BaseSpeed:+#;-#;0} Pwr:{card.BasePower} Def:{card.BaseDefense} Rng:{rangeStr}]";
+                    sb.DrawString(_smallFont, label, new Vector2(panelX, panelY + 24 + i * 18), c);
+                    var labelSize = _smallFont.MeasureString(label);
+                    sb.DrawString(_smallFont, $" Aim:{targetStr}", new Vector2(panelX + labelSize.X, panelY + 24 + i * 18), targetColor);
+                }
+                sb.DrawString(_smallFont, "[Up/Down] Navigate   [Enter] Commit   [Backspace] Back",
+                    new Vector2(panelX, panelY + 24 + _p2ValidUniques.Count * 18 + 8), Color.DimGray);
+            }
+            return;
+        }
+
+        // --- Normal P1 card selection ---
+        if (_playerCommitted) return;
 
         if (_selectedGeneric == null)
         {
@@ -560,6 +806,7 @@ public class FightScreen : GameScreen
                 return;
             }
 
+            var defender = _match.FighterB;
             for (int i = 0; i < _validUniques.Count; i++)
             {
                 var card = _validUniques[i];
@@ -587,8 +834,34 @@ public class FightScreen : GameScreen
                 string mvStr = combinedMaxMv == 0 ? "-" :
                     combinedMinMv == combinedMaxMv ? $"{mvType}{combinedMaxMv}" :
                     $"{mvType}{combinedMinMv}-{combinedMaxMv}";
+
+                // Build target indicator: "Head->Torso" or just "Head" if both are same
+                string targetStr = card switch
+                {
+                    UniqueCard u => u.PrimaryTarget == u.SecondaryTarget
+                        ? $"{u.PrimaryTarget}"
+                        : defender.LocationStates[u.PrimaryTarget].State == Models.Fighter.DamageState.Disabled
+                            ? $"[{u.PrimaryTarget}]->{u.SecondaryTarget}"
+                            : $"{u.PrimaryTarget}->{u.SecondaryTarget}",
+                    SpecialCard s => s.PrimaryTarget == s.SecondaryTarget
+                        ? $"{s.PrimaryTarget}"
+                        : defender.LocationStates[s.PrimaryTarget].State == Models.Fighter.DamageState.Disabled
+                            ? $"[{s.PrimaryTarget}]->{s.SecondaryTarget}"
+                            : $"{s.PrimaryTarget}->{s.SecondaryTarget}",
+                    _ => "?",
+                };
+                Color targetColor = card switch
+                {
+                    UniqueCard u when defender.LocationStates[u.PrimaryTarget].State == Models.Fighter.DamageState.Disabled
+                        => Color.Orange,
+                    _ => Color.LightCyan,
+                };
+
                 string label = $"{(sel ? ">" : " ")} {cardName}  [Spd:{card.BaseSpeed:+#;-#;0} Pwr:{card.BasePower} Def:{card.BaseDefense} Mv:{mvStr} Rng:{rangeStr}]";
                 sb.DrawString(_smallFont, label, new Vector2(panelX, panelY + 24 + i * 18), c);
+                // Draw target indicator to the right of the main label
+                var labelSize = _smallFont.MeasureString(label);
+                sb.DrawString(_smallFont, $" Aim:{targetStr}", new Vector2(panelX + labelSize.X, panelY + 24 + i * 18), targetColor);
             }
 
             sb.DrawString(_smallFont, "[Up/Down] Navigate   [Enter] Commit   [Backspace] Back",
@@ -636,7 +909,10 @@ public class FightScreen : GameScreen
                 sb.DrawString(_smallFont, safeText, new Vector2(logX, logY + 16 + i * 14), Color.LightGray);
             }
 
-            if (_match.Phase == MatchPhase.RoundResult)
+            if (_match.Phase == MatchPhase.RoundMidpoint)
+                sb.DrawString(_smallFont, "[Enter/Space] Continue...",
+                    new Vector2(logX, logY + 16 + Math.Min(_roundLog.Count, 10) * 14), Color.Yellow);
+            else if (_match.Phase == MatchPhase.RoundResult)
                 sb.DrawString(_smallFont, "[Enter/Space] Next Round",
                     new Vector2(logX, logY + 16 + Math.Min(_roundLog.Count, 10) * 14), Color.DimGray);
         }

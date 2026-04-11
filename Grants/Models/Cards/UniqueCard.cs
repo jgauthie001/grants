@@ -37,4 +37,14 @@ public class UniqueCard : CardBase
     /// Maximum range in hexes. Attack cannot hit opponents farther than this.
     /// </summary>
     public int MaxRange { get; set; } = 1;
+
+    /// <summary>
+    /// Primary target location on the defender. Used when that location is not Disabled.
+    /// </summary>
+    public Fighter.BodyLocation PrimaryTarget { get; init; } = Fighter.BodyLocation.Torso;
+
+    /// <summary>
+    /// Fallback target location if the primary is Disabled on the defender.
+    /// </summary>
+    public Fighter.BodyLocation SecondaryTarget { get; init; } = Fighter.BodyLocation.Torso;
 }

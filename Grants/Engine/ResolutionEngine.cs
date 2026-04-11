@@ -9,16 +9,23 @@ namespace Grants.Engine;
 /// Orchestrates a full round of combat:
 /// 1. Receive both committed card pairs
 /// 2. Determine speed order
-/// 3. Faster fighter: move then attack
+/// 3. Faster fighter: move then attack → pause (RoundMidpoint)
 /// 4. Slower fighter: move then attack (can be cancelled if disabled by step 3)
-/// 5. Speed tie: simultaneous move+attack
+/// 5. Speed tie: simultaneous move+attack → no midpoint pause
 /// 6. Process keywords, cooldowns
 /// 7. Check KO
-/// Returns a completed RoundState.
+/// Returns a RoundState (possibly partial — full state after ResolveSecondHalf).
 /// </summary>
 public static class ResolutionEngine
 {
-    public static RoundState ResolveRound(MatchState match)
+    /// <summary>
+    /// Resolves the first fighter's action (move + attack).
+    /// Sets match.Phase = RoundMidpoint and returns the partial RoundState.
+    /// Call ResolveSecondHalf() after the player acknowledges.
+    ///
+    /// For speed ties, resolves the full round immediately (no midpoint pause).
+    /// </summary>
+    public static RoundState ResolveFirstHalf(MatchState match)
     {
         var pairA = match.SelectedPairA!;
         var pairB = match.SelectedPairB!;
@@ -46,75 +53,48 @@ public static class ResolutionEngine
         round.Log.Add($"--- Round {round.RoundNumber} ---");
         round.Log.Add($"Speed: {fa.DisplayName}={speedA}, {fb.DisplayName}={speedB}.");
 
+        match.CurrentRoundState = round;
+
+        // --- Stage + Persona hooks: round start ---
+        match.Stage.OnRoundStart(match, match.StageState);
+        fa.Definition.Persona.OnRoundResolutionStart(round, match, fa, fb, fa.PersonaState);
+        fb.Definition.Persona.OnRoundResolutionStart(round, match, fb, fa, fb.PersonaState);
+
         if (round.FighterAFaster)
         {
-            // ===== FASTER: A moves then attacks =====
+            // ===== FIRST: A moves then attacks =====
             match.Board.SetOccupied(posB, true);
             var newPosA = MovementEngine.ResolveMovement(fa, pairA, posA, posB, match.Board, chosenMoveA);
             match.Board.SetOccupied(posB, false);
             fa.HexQ = newPosA.Q; fa.HexR = newPosA.R;
             int distA = newPosA.DistanceTo(posB);
             round.Log.Add($"{fa.DisplayName} moves to {newPosA} (dist={distA}).");
+            var resultA1 = AttackEngine.Resolve(fa, pairA, fb, pairB, distA, round);
+            ApplyKnockback(resultA1, fa, fb, match.Board, round);
+            round.FirstHalfLogCount = round.Log.Count;
 
-            var resultA = AttackEngine.Resolve(fa, pairA, fb, pairB, distA, round);
-
-            // ===== SLOWER: B moves then attacks (only if not disabled) =====
-            bool bAttackCancelled = IsPairedBodyPartDisabled(fb, pairB);
-            if (!bAttackCancelled)
-            {
-                match.Board.SetOccupied(newPosA, true);
-                var newPosB = MovementEngine.ResolveMovement(fb, pairB, posB, newPosA, match.Board);
-                match.Board.SetOccupied(newPosA, false);
-                fb.HexQ = newPosB.Q; fb.HexR = newPosB.R;
-                int distB = newPosA.DistanceTo(newPosB);
-                round.Log.Add($"{fb.DisplayName} moves to {newPosB} (dist={distB}).");
-                AttackEngine.Resolve(fb, pairB, fa, pairA, distB, round);
-            }
-            else
-            {
-                round.Log.Add($"{fb.DisplayName}'s action cancelled — required body part disabled.");
-            }
-
-            round.Outcome = resultA.Landed
-                ? (bAttackCancelled ? RoundOutcome.FighterAWins : RoundOutcome.BothHit)
-                : RoundOutcome.FighterBWins;
+            // Pause before second fighter
+            match.Phase = MatchPhase.RoundMidpoint;
         }
         else if (round.FighterBFaster)
         {
-            // ===== FASTER: B moves then attacks =====
+            // ===== FIRST: B moves then attacks =====
             match.Board.SetOccupied(posA, true);
             var newPosB = MovementEngine.ResolveMovement(fb, pairB, posB, posA, match.Board);
             match.Board.SetOccupied(posA, false);
             fb.HexQ = newPosB.Q; fb.HexR = newPosB.R;
             int distB = posA.DistanceTo(newPosB);
             round.Log.Add($"{fb.DisplayName} moves to {newPosB} (dist={distB}).");
+            var resultB1 = AttackEngine.Resolve(fb, pairB, fa, pairA, distB, round);
+            ApplyKnockback(resultB1, fb, fa, match.Board, round);
+            round.FirstHalfLogCount = round.Log.Count;
 
-            var resultB = AttackEngine.Resolve(fb, pairB, fa, pairA, distB, round);
-
-            // ===== SLOWER: A moves then attacks (only if not disabled) =====
-            bool aAttackCancelled = IsPairedBodyPartDisabled(fa, pairA);
-            if (!aAttackCancelled)
-            {
-                match.Board.SetOccupied(newPosB, true);
-                var newPosA = MovementEngine.ResolveMovement(fa, pairA, posA, newPosB, match.Board, chosenMoveA);
-                match.Board.SetOccupied(newPosB, false);
-                fa.HexQ = newPosA.Q; fa.HexR = newPosA.R;
-                int distA = newPosA.DistanceTo(newPosB);
-                round.Log.Add($"{fa.DisplayName} moves to {newPosA} (dist={distA}).");
-                AttackEngine.Resolve(fa, pairA, fb, pairB, distA, round);
-            }
-            else
-            {
-                round.Log.Add($"{fa.DisplayName}'s action cancelled — required body part disabled.");
-            }
-
-            round.Outcome = resultB.Landed
-                ? (aAttackCancelled ? RoundOutcome.FighterBWins : RoundOutcome.BothHit)
-                : RoundOutcome.FighterAWins;
+            // Pause before second fighter
+            match.Phase = MatchPhase.RoundMidpoint;
         }
         else
         {
-            // ===== SPEED TIE: simultaneous — both move then both attack =====
+            // ===== SPEED TIE: resolve fully now (no midpoint) =====
             var newPosA = MovementEngine.ResolveMovement(fa, pairA, posA, posB, match.Board, chosenMoveA);
             var newPosB = MovementEngine.ResolveMovement(fb, pairB, posB, posA, match.Board);
             fa.HexQ = newPosA.Q; fa.HexR = newPosA.R;
@@ -123,7 +103,9 @@ public static class ResolutionEngine
             round.Log.Add($"Simultaneous: {fa.DisplayName} at {newPosA}, {fb.DisplayName} at {newPosB} (dist={dist}).");
 
             var resultA = AttackEngine.Resolve(fa, pairA, fb, pairB, dist, round);
+            ApplyKnockback(resultA, fa, fb, match.Board, round);
             var resultB = AttackEngine.Resolve(fb, pairB, fa, pairA, dist, round);
+            ApplyKnockback(resultB, fb, fa, match.Board, round);
 
             round.FighterAMissed = !resultA.InRange;
             round.FighterBMissed = !resultB.InRange;
@@ -136,13 +118,90 @@ public static class ResolutionEngine
                 round.Outcome = RoundOutcome.FighterBWins;
             else
                 round.Outcome = RoundOutcome.BothHit;
+
+            FinishRound(match, round);
         }
 
+        return round;
+    }
+
+    /// <summary>
+    /// Resolves the second fighter's action after the mid-round pause.
+    /// Only valid when match.Phase == RoundMidpoint.
+    /// </summary>
+    public static void ResolveSecondHalf(MatchState match)
+    {
+        var round = match.CurrentRoundState!;
+        var pairA = match.SelectedPairA!;
+        var pairB = match.SelectedPairB!;
+        var fa = match.FighterA;
+        var fb = match.FighterB;
+
+        var posA = new HexCoord(fa.HexQ, fa.HexR);
+        var posB = new HexCoord(fb.HexQ, fb.HexR);
+
+        if (round.FighterAFaster)
+        {
+            // A already acted; now B acts
+            bool bCancelled = IsPairedBodyPartDisabled(fb, pairB);
+            if (!bCancelled)
+            {
+                match.Board.SetOccupied(posA, true);
+                var newPosB = MovementEngine.ResolveMovement(fb, pairB, posB, posA, match.Board);
+                match.Board.SetOccupied(posA, false);
+                fb.HexQ = newPosB.Q; fb.HexR = newPosB.R;
+                int distB = posA.DistanceTo(newPosB);
+                round.Log.Add($"{fb.DisplayName} moves to {newPosB} (dist={distB}).");
+                var resultB2 = AttackEngine.Resolve(fb, pairB, fa, pairA, distB, round);
+                ApplyKnockback(resultB2, fb, fa, match.Board, round);
+            }
+            else
+            {
+                round.Log.Add($"{fb.DisplayName}'s action cancelled -- required body part disabled.");
+            }
+
+            // Determine outcome based on first-half attack result
+            bool aLanded = round.DamageToB.Count > 0 || round.Log.Skip(2).Take(round.FirstHalfLogCount - 2).Any(l => l.Contains("lands") || l.Contains("hit"));
+            round.Outcome = bCancelled
+                ? RoundOutcome.FighterAWins
+                : RoundOutcome.BothHit; // refined below
+        }
+        else // FighterBFaster
+        {
+            // B already acted; now A acts
+            bool aCancelled = IsPairedBodyPartDisabled(fa, pairA);
+            if (!aCancelled)
+            {
+                match.Board.SetOccupied(posB, true);
+                var newPosA = MovementEngine.ResolveMovement(fa, pairA, posA, posB, match.Board, match.ChosenMoveA);
+                match.Board.SetOccupied(posB, false);
+                fa.HexQ = newPosA.Q; fa.HexR = newPosA.R;
+                int distA = newPosA.DistanceTo(posB);
+                round.Log.Add($"{fa.DisplayName} moves to {newPosA} (dist={distA}).");
+                var resultA2 = AttackEngine.Resolve(fa, pairA, fb, pairB, distA, round);
+                ApplyKnockback(resultA2, fa, fb, match.Board, round);
+            }
+            else
+            {
+                round.Log.Add($"{fa.DisplayName}'s action cancelled -- required body part disabled.");
+            }
+
+            round.Outcome = aCancelled
+                ? RoundOutcome.FighterBWins
+                : RoundOutcome.BothHit;
+        }
+
+        FinishRound(match, round);
+    }
+
+    private static void FinishRound(MatchState match, RoundState round)
+    {
+        var fa = match.FighterA;
+        var fb = match.FighterB;
+
         // ===== COOLDOWNS =====
-        ApplyCooldowns(fa, pairA, fb.StaggerTurnsRemaining > 0);
-        ApplyCooldowns(fb, pairB, fa.StaggerTurnsRemaining > 0);
-        // Note: TickCooldowns is called at the start of the next card-selection phase
-        // (in FightScreen.LoadAvailablePairs) so cooldowns last the full turn.
+        ApplyCooldowns(fa, match.SelectedPairA!, fb.StaggerTurnsRemaining > 0);
+        ApplyCooldowns(fb, match.SelectedPairB!, fa.StaggerTurnsRemaining > 0);
 
         // ===== KO CHECK =====
         bool aKO = fa.IsKnockedOut();
@@ -152,9 +211,7 @@ public static class ResolutionEngine
         {
             match.Phase = MatchPhase.MatchOver;
             if (aKO && bKO)
-            {
                 round.Log.Add("Double KO! Match is a draw.");
-            }
             else if (aKO)
             {
                 match.Winner = fb;
@@ -173,11 +230,15 @@ public static class ResolutionEngine
             match.Phase = MatchPhase.RoundResult;
         }
 
+        // --- Stage + Persona hooks: round complete ---
+        fa.Definition.Persona.OnRoundResolutionComplete(round, match, fa, fb, fa.PersonaState);
+        fb.Definition.Persona.OnRoundResolutionComplete(round, match, fb, fa, fb.PersonaState);
+        match.Stage.OnRoundComplete(round, match, match.StageState);
+
         match.CurrentRound++;
         match.History.Add(round);
         match.CurrentRoundState = round;
-
-        return round;
+        match.ChosenMoveA = null;
     }
 
     private static bool IsPairedBodyPartDisabled(FighterInstance fighter, CardPair pair)
@@ -205,6 +266,36 @@ public static class ResolutionEngine
         {
             int cd = fighter.GetCardCooldown(pair.Special) + extraStagger;
             fighter.SetCooldown(pair.Special.Id, cd);
+        }
+    }
+
+    /// <summary>
+    /// If the attack result has Knockback triggered, move the defender 1 hex directly
+    /// away from the attacker. No-op if the destination is out-of-bounds or occupied.
+    /// </summary>
+    private static void ApplyKnockback(
+        AttackEngine.AttackResult result,
+        FighterInstance attacker,
+        FighterInstance defender,
+        HexBoard board,
+        RoundState round)
+    {
+        if (!result.TriggeredKeywords.ContainsKeyword(CardKeyword.Knockback)) return;
+
+        var attackerPos = new HexCoord(attacker.HexQ, attacker.HexR);
+        var defenderPos = new HexCoord(defender.HexQ, defender.HexR);
+        int dirAway = HexMath.DirectionTo(attackerPos, defenderPos);
+        var dest = defenderPos.Neighbor(dirAway);
+
+        if (board.IsValid(dest) && !board.IsOccupied(dest))
+        {
+            defender.HexQ = dest.Q;
+            defender.HexR = dest.R;
+            round.Log.Add($"  {defender.DisplayName} is knocked back to {dest}.");
+        }
+        else
+        {
+            round.Log.Add($"  {defender.DisplayName} resists knockback (blocked).");
         }
     }
 }

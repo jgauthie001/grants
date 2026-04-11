@@ -18,7 +18,7 @@ public static class AttackEngine
         public int DefenseFinal;
         public int NetDamageSteps;
         public BodyLocation TargetLocation;
-        public List<CardKeyword> TriggeredKeywords;
+        public List<CardKeywordValue> TriggeredKeywords;
     }
 
     /// <summary>
@@ -35,17 +35,28 @@ public static class AttackEngine
     {
         var result = new AttackResult
         {
-            TriggeredKeywords = new List<CardKeyword>(),
+            TriggeredKeywords = new List<CardKeywordValue>(),
         };
+
+        // Build keyword lists via FighterInstance so upgrade-added keywords are included
+        var atkKeywords = new List<CardKeywordValue>();
+        if (attackerPair.Generic != null) atkKeywords.AddRange(attacker.GetCardKeywords(attackerPair.Generic));
+        if (attackerPair.Unique  != null) atkKeywords.AddRange(attacker.GetCardKeywords(attackerPair.Unique));
+        if (attackerPair.Special != null) atkKeywords.AddRange(attacker.GetCardKeywords(attackerPair.Special));
+
+        var defKeywords = new List<CardKeywordValue>();
+        if (defenderPair.Generic != null) defKeywords.AddRange(defender.GetCardKeywords(defenderPair.Generic));
+        if (defenderPair.Unique  != null) defKeywords.AddRange(defender.GetCardKeywords(defenderPair.Unique));
+        if (defenderPair.Special != null) defKeywords.AddRange(defender.GetCardKeywords(defenderPair.Special));
 
         // --- Range check ---
         // Attacks hit if distance is within the min/max range bracket
         // Keywords like Lunge can extend the maximum range
         int minRequiredRange = attackerPair.EffectiveMinRange;
         int maxRequiredRange = attackerPair.EffectiveMaxRange;
-        
+
         // Lunge keyword: +1 to maximum range
-        if (attackerPair.AllKeywords.ContainsKeyword(CardKeyword.Lunge))
+        if (atkKeywords.ContainsKeyword(CardKeyword.Lunge))
             maxRequiredRange++;
 
         result.InRange = currentDistance >= minRequiredRange && currentDistance <= maxRequiredRange;
@@ -56,10 +67,20 @@ public static class AttackEngine
         }
 
         // --- Determine target location ---
-        // The defender's generic card body part determines where they get hit
-        result.TargetLocation = defenderPair.Generic != null
-            ? FighterInstance.BodyPartToLocation(defenderPair.Generic.BodyPart)
-            : BodyLocation.Torso; // Default if no generic (shouldn't normally occur)
+        // Read primary/secondary targets from the attacker's unique or special card.
+        // If the primary location on the defender is already Disabled, hit the secondary instead.
+        BodyLocation primaryTarget = attackerPair.Unique?.PrimaryTarget
+            ?? attackerPair.Special?.PrimaryTarget
+            ?? BodyLocation.Torso;
+        BodyLocation secondaryTarget = attackerPair.Unique?.SecondaryTarget
+            ?? attackerPair.Special?.SecondaryTarget
+            ?? primaryTarget;
+
+        bool primaryDisabled = defender.LocationStates[primaryTarget].State == DamageState.Disabled;
+        result.TargetLocation = primaryDisabled ? secondaryTarget : primaryTarget;
+
+        if (primaryDisabled && primaryTarget != secondaryTarget)
+            round.Log.Add($"  ({primaryTarget} disabled -- redirecting to {secondaryTarget})");
 
         // --- Power vs Defense ---
         int attackerPower = attacker.GetCardPower(attackerPair.Generic ?? (CardBase)attackerPair.Special!)
@@ -69,28 +90,25 @@ public static class AttackEngine
                             + defender.GetCardDefense(defenderPair.Unique ?? (CardBase)defenderPair.Special!);
 
         // --- Keyword modifiers ---
-        var atkKeywords = attackerPair.AllKeywords.ToList();
-
         // ArmorBreak: reduce defender defense by 1
         if (atkKeywords.ContainsKeyword(CardKeyword.ArmorBreak))
         {
             defenderDefense = Math.Max(0, defenderDefense - 1);
-            result.TriggeredKeywords.Add(CardKeyword.ArmorBreak);
+            result.TriggeredKeywords.Add(new CardKeywordValue(CardKeyword.ArmorBreak));
         }
 
         // Piercing: ignore half defender defense
         if (atkKeywords.ContainsKeyword(CardKeyword.Piercing))
         {
             defenderDefense = defenderDefense / 2;
-            result.TriggeredKeywords.Add(CardKeyword.Piercing);
+            result.TriggeredKeywords.Add(new CardKeywordValue(CardKeyword.Piercing));
         }
 
         // Guard keyword on defender: +2 defense
-        var defKeywords = defenderPair.AllKeywords.ToList();
         if (defKeywords.ContainsKeyword(CardKeyword.Guard))
         {
             defenderDefense += 2;
-            result.TriggeredKeywords.Add(CardKeyword.Guard);
+            result.TriggeredKeywords.Add(new CardKeywordValue(CardKeyword.Guard));
         }
 
         result.PowerFinal = attackerPower;
@@ -113,7 +131,7 @@ public static class AttackEngine
         if (atkKeywords.ContainsKeyword(CardKeyword.Crushing))
         {
             result.NetDamageSteps++;
-            result.TriggeredKeywords.Add(CardKeyword.Crushing);
+            result.TriggeredKeywords.Add(new CardKeywordValue(CardKeyword.Crushing));
         }
 
         round.Log.Add(
@@ -123,22 +141,23 @@ public static class AttackEngine
         // --- Apply keywords that modify target ---
         if (atkKeywords.ContainsKeyword(CardKeyword.Bleed))
         {
-            defender.LocationStates[result.TargetLocation].BleedStacks++;
-            result.TriggeredKeywords.Add(CardKeyword.Bleed);
+            int bleedVal = atkKeywords.GetKeywordValue(CardKeyword.Bleed);
+            defender.LocationStates[result.TargetLocation].BleedStacks += bleedVal;
+            result.TriggeredKeywords.Add(new CardKeywordValue(CardKeyword.Bleed, bleedVal));
             round.Log.Add($"  {defender.DisplayName}'s {result.TargetLocation} is now bleeding!");
         }
 
         if (atkKeywords.ContainsKeyword(CardKeyword.Stagger))
         {
             defender.StaggerTurnsRemaining = 1;
-            result.TriggeredKeywords.Add(CardKeyword.Stagger);
-            round.Log.Add($"  {defender.DisplayName} is staggered — cooldowns +1 next turn.");
+            result.TriggeredKeywords.Add(new CardKeywordValue(CardKeyword.Stagger));
+            round.Log.Add($"  {defender.DisplayName} is staggered -- cooldowns +1 next turn.");
         }
 
         if (atkKeywords.ContainsKeyword(CardKeyword.Knockback))
         {
-            result.TriggeredKeywords.Add(CardKeyword.Knockback);
-            round.Log.Add($"  {defender.DisplayName} is knocked back 1 hex.");
+            result.TriggeredKeywords.Add(new CardKeywordValue(CardKeyword.Knockback));
+            // Spatial movement is applied by ResolutionEngine after Resolve() returns
         }
 
         // Kill keyword: instantly disable all body parts (TEST ONLY)
@@ -148,7 +167,7 @@ public static class AttackEngine
             {
                 loc.State = DamageState.Disabled;
             }
-            result.TriggeredKeywords.Add(CardKeyword.Kill);
+            result.TriggeredKeywords.Add(new CardKeywordValue(CardKeyword.Kill));
             round.Log.Add($"  *** {defender.DisplayName} is DEFEATED by Kill keyword! ***");
         }
 

@@ -166,6 +166,8 @@ public static class GrantsFighter
         MaxMovement = 0,
         MinRange = 1,
         MaxRange = 1,
+        PrimaryTarget = Models.Fighter.BodyLocation.Head,
+        SecondaryTarget = Models.Fighter.BodyLocation.Torso,
         BaseCooldown = 2,
     };
 
@@ -182,6 +184,8 @@ public static class GrantsFighter
         MaxMovement = 0,
         MinRange = 1,
         MaxRange = 1,
+        PrimaryTarget = Models.Fighter.BodyLocation.Torso,
+        SecondaryTarget = Models.Fighter.BodyLocation.Core,
         BaseCooldown = 2,
     };
 
@@ -198,6 +202,8 @@ public static class GrantsFighter
         MaxMovement = 0,
         MinRange = 1,
         MaxRange = 1,
+        PrimaryTarget = Models.Fighter.BodyLocation.Head,
+        SecondaryTarget = Models.Fighter.BodyLocation.RightArm,
         BaseCooldown = 2,
     };
 
@@ -216,6 +222,8 @@ public static class GrantsFighter
         BaseMovementType = MovementType.Approach,
         MinRange = 2,
         MaxRange = 2,
+        PrimaryTarget = Models.Fighter.BodyLocation.Torso,
+        SecondaryTarget = Models.Fighter.BodyLocation.Stance,
         BaseCooldown = 2,
     };
 
@@ -231,6 +239,8 @@ public static class GrantsFighter
         MaxMovement = 0,
         MinRange = 1,
         MaxRange = 1,
+        PrimaryTarget = Models.Fighter.BodyLocation.LeftLeg,
+        SecondaryTarget = Models.Fighter.BodyLocation.RightLeg,
         BaseCooldown = 2,
     };
 
@@ -247,6 +257,8 @@ public static class GrantsFighter
         MaxMovement = 0,
         MinRange = 1,
         MaxRange = 1,
+        PrimaryTarget = Models.Fighter.BodyLocation.Head,
+        SecondaryTarget = Models.Fighter.BodyLocation.Torso,
         BaseCooldown = 2,
     };
 
@@ -265,6 +277,8 @@ public static class GrantsFighter
         BaseMovementType = MovementType.Retreat,
         MinRange = 2,
         MaxRange = 2,
+        PrimaryTarget = Models.Fighter.BodyLocation.Stance,
+        SecondaryTarget = Models.Fighter.BodyLocation.LeftLeg,
         BaseCooldown = 2,
     };
 
@@ -281,6 +295,8 @@ public static class GrantsFighter
         MaxMovement = 0,
         MinRange = 1,
         MaxRange = 1,
+        PrimaryTarget = Models.Fighter.BodyLocation.Torso,
+        SecondaryTarget = Models.Fighter.BodyLocation.Core,
         BaseCooldown = 2,
     };
 
@@ -299,6 +315,8 @@ public static class GrantsFighter
         MaxMovement = 0,
         MinRange = 1,
         MaxRange = 1,
+        PrimaryTarget = Models.Fighter.BodyLocation.Torso,
+        SecondaryTarget = Models.Fighter.BodyLocation.Head,
         BaseCooldown = 3,
     };
 
@@ -316,6 +334,8 @@ public static class GrantsFighter
         BaseMovementType = MovementType.Approach,
         MinRange = 2,
         MaxRange = 2,
+        PrimaryTarget = Models.Fighter.BodyLocation.Torso,
+        SecondaryTarget = Models.Fighter.BodyLocation.LeftArm,
         BaseCooldown = 3,
         Standalone = true,
     };

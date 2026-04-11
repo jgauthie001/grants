@@ -13,7 +13,7 @@ public class MainMenuScreen : GameScreen
     private SpriteFont _smallFont = null!;
     private Texture2D _pixel = null!;
 
-    private string[] _menuItems = { "Play (PvE)_pl", "PvP Casual_pl", "PvP Ranked_pl", "Character Builder_pl", "Profile_pl", "Keyword Editor_pl", "Exit_pl" };
+    private string[] _menuItems = { "Play (PvE)_pl", "Local PvP", "PvP Casual_pl", "PvP Ranked_pl", "Character Builder_pl", "Profile_pl", "Keyword Editor_pl", "Exit_pl" };
     private int _selectedIndex = 0;
     private KeyboardState _prevKeys;
 
@@ -48,12 +48,13 @@ public class MainMenuScreen : GameScreen
         switch (_selectedIndex)
         {
             case 0: SwitchTo(ScreenType.FighterSelect, "pve"); break;
-            case 1: SwitchTo(ScreenType.FighterSelect, "pvp_casual"); break;
-            case 2: SwitchTo(ScreenType.FighterSelect, "pvp_ranked"); break;
-            case 3: SwitchTo(ScreenType.CharacterBuilder); break;
-            case 4: SwitchTo(ScreenType.Profile); break;
-            case 5: SwitchTo(ScreenType.KeywordEditor); break;
-            case 6: Game.Exit(); break;
+            case 1: SwitchTo(ScreenType.FighterSelect, "pvp_local"); break;
+            case 2: SwitchTo(ScreenType.FighterSelect, "pvp_casual"); break;
+            case 3: SwitchTo(ScreenType.FighterSelect, "pvp_ranked"); break;
+            case 4: SwitchTo(ScreenType.CharacterBuilder); break;
+            case 5: SwitchTo(ScreenType.Profile); break;
+            case 6: SwitchTo(ScreenType.KeywordEditor); break;
+            case 7: Game.Exit(); break;
         }
     }
 

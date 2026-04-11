@@ -12,6 +12,7 @@ public enum MatchPhase
     CardSelection,      // Both fighters choosing their pair
     ResolutionMovement, // Applying movement in speed order
     ResolutionAttack,   // Applying attacks in speed order
+    RoundMidpoint,      // Pause after first fighter acts, before second
     RoundResult,        // Displaying round outcome before next round
     MatchOver,          // One fighter KO'd
 }
@@ -60,6 +61,9 @@ public class RoundState
     // Did each fighter miss due to movement?
     public bool FighterAMissed { get; set; } = false;
     public bool FighterBMissed { get; set; } = false;
+
+    // How many log lines belong to the first fighter's action (for mid-round pause display)
+    public int FirstHalfLogCount { get; set; } = 0;
 }
 
 /// <summary>
@@ -99,6 +103,9 @@ public class MatchState
     public bool IsOver => Phase == MatchPhase.MatchOver;
 
     public RoundState? CurrentRoundState { get; set; }
+
+    // Mid-round pause: log lines from first fighter's action displayed at RoundMidpoint
+    public List<string> MidRoundLog { get; set; } = new();
 
     public FighterInstance Opponent(FighterInstance fighter) =>
         fighter == FighterA ? FighterB : FighterA;

@@ -12,9 +12,17 @@
 - [x] Hex board rendering: real pointy-top hexagon shape (scanline fill)
 - [x] Add range display to CharacterBuilderScreen — MinRange/MaxRange editable for unique/special, MinRangeMod/MaxRangeMod for generic
 
+## Builder
+
+- [ ] CharacterBuilderScreen audit pass — ensure all fighter-level settings are editable:
+  - `CriticalLocations` — toggle which body locations count toward KO
+  - `KOThreshold` — how many critical locations must be Disabled to trigger KO
+  - Card `PrimaryTarget` / `SecondaryTarget` on unique/special cards
+
 ## Gameplay
 
 - [ ] Mouse input support in `FightScreen` — click hex to select card pair
+- [ ] Local PvP: P2 movement selection — currently AI-resolved; P2 should choose hex destination when their card grants movement
 - [ ] Keyword effects not yet wired in `FightScreen` display (Parry counter, Knockback, etc.)
 - [ ] Bleed stack display in damage panel
 - [ ] Stagger turns remaining display

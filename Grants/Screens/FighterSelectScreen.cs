@@ -22,11 +22,18 @@ public class FighterSelectScreen : GameScreen
 
     private List<FighterDefinition> _fighters = new();
 
+    // Local PvP: two-step selection
+    private FighterDefinition? _p1Selection = null;
+    private bool _selectingP2 = false;
+
     public override void OnEnter(object? data = null)
     {
         _font = Game.DefaultFont;
         _smallFont = Game.SmallFont;
         _matchType = data as string ?? "pve";
+        _p1Selection = null;
+        _selectingP2 = false;
+        _selectedIndex = 0;
 
         _fighters = new List<FighterDefinition>
         {
@@ -62,6 +69,21 @@ public class FighterSelectScreen : GameScreen
         if (_matchType == "pvp_ranked" && !progress.IsRankedUnlocked)
             return; // Locked — do nothing (UI shows the requirement)
 
+        if (_matchType == "pvp_local" && !_selectingP2)
+        {
+            // P1 has picked — now ask P2
+            _p1Selection = fighter;
+            _selectingP2 = true;
+            _selectedIndex = 0;
+            return;
+        }
+
+        if (_matchType == "pvp_local" && _selectingP2)
+        {
+            SwitchTo(ScreenType.Fight, (_p1Selection!, fighter, "pvp_local"));
+            return;
+        }
+
         SwitchTo(ScreenType.Fight, (fighter, _matchType));
     }
 
@@ -70,8 +92,8 @@ public class FighterSelectScreen : GameScreen
         sb.Begin();
         int cx = Game.GraphicsDevice.Viewport.Width / 2;
 
-        sb.DrawString(_font, "Select Fighter_pl",
-            new Vector2(cx - _font.MeasureString("Select Fighter_pl").X / 2, 60), Color.White);
+        sb.DrawString(_font, _selectingP2 ? "Player 2 - Select Fighter" : "Select Fighter_pl",
+            new Vector2(cx - _font.MeasureString(_selectingP2 ? "Player 2 - Select Fighter" : "Select Fighter_pl").X / 2, 60), Color.White);
 
         for (int i = 0; i < _fighters.Count; i++)
         {
