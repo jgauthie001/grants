@@ -86,4 +86,10 @@ public class LocationState
             next = Math.Min(next, (int)DamageCap.Value);
         State = (DamageState)Math.Min(next, (int)DamageState.Disabled);
     }
+
+    /// <summary>Reverses up to <paramref name="steps"/> damage steps (cannot go below Healthy).</summary>
+    public void ReduceDamage(int steps = 1)
+    {
+        State = (DamageState)Math.Max(0, (int)State - steps);
+    }
 }

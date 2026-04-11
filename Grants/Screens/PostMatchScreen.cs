@@ -97,8 +97,8 @@ public class PostMatchScreen : GameScreen
         int cx = Game.GraphicsDevice.Viewport.Width / 2;
         int cy = Game.GraphicsDevice.Viewport.Height / 2;
 
-        string headline = _playerWon ? "Victory!_pl" : "Defeat!_pl";
-        Color headColor = _playerWon ? Color.Gold : Color.OrangeRed;
+        string headline = _match.IsDraw ? "Draw!" : (_playerWon ? "Victory!" : "Defeat!");
+        Color headColor = _match.IsDraw ? Color.LightYellow : (_playerWon ? Color.Gold : Color.OrangeRed);
         var headSize = _font.MeasureString(headline);
         sb.DrawString(_font, headline, new Vector2(cx - headSize.X / 2, 80), headColor);
 

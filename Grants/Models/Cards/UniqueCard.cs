@@ -47,4 +47,29 @@ public class UniqueCard : CardBase
     /// Fallback target location if the primary is Disabled on the defender.
     /// </summary>
     public Fighter.BodyLocation SecondaryTarget { get; init; } = Fighter.BodyLocation.Torso;
+
+    /// <summary>Deep-clones this card. Pass a new ID, or null to keep the same ID.</summary>
+    public UniqueCard Clone(string? newId = null) => new UniqueCard
+    {
+        Id = newId ?? Id,
+        Name = Name,
+        Description = Description,
+        BasePower = BasePower,
+        BaseDefense = BaseDefense,
+        BaseSpeed = BaseSpeed,
+        MinMovement = MinMovement,
+        MaxMovement = MaxMovement,
+        BaseMovementType = BaseMovementType,
+        Keywords = new List<CardKeywordValue>(Keywords.Select(k => new CardKeywordValue(k.Keyword, k.Value))),
+        BaseCooldown = BaseCooldown,
+        SlotOne = new UpgradeSlot { IsUnlocked = SlotOne.IsUnlocked, UpgradeType = SlotOne.UpgradeType, StatBonus = SlotOne.StatBonus, KeywordAdded = SlotOne.KeywordAdded, CooldownReduction = SlotOne.CooldownReduction },
+        SlotTwo = new UpgradeSlot { IsUnlocked = SlotTwo.IsUnlocked, UpgradeType = SlotTwo.UpgradeType, StatBonus = SlotTwo.StatBonus, KeywordAdded = SlotTwo.KeywordAdded, CooldownReduction = SlotTwo.CooldownReduction },
+        RequiredBodyTags = new List<string>(RequiredBodyTags),
+        ForbiddenBodyParts = new List<BodyPart>(ForbiddenBodyParts),
+        RequiresOpponentCondition = RequiresOpponentCondition,
+        MinRange = MinRange,
+        MaxRange = MaxRange,
+        PrimaryTarget = PrimaryTarget,
+        SecondaryTarget = SecondaryTarget,
+    };
 }

@@ -43,4 +43,29 @@ public class SpecialCard : CardBase
     /// Fallback target location if the primary is Disabled on the defender.
     /// </summary>
     public Fighter.BodyLocation SecondaryTarget { get; init; } = Fighter.BodyLocation.Torso;
+
+    /// <summary>Deep-clones this card. Pass a new ID, or null to keep the same ID.</summary>
+    public SpecialCard Clone(string? newId = null) => new SpecialCard
+    {
+        Id = newId ?? Id,
+        Name = Name,
+        Description = Description,
+        BasePower = BasePower,
+        BaseDefense = BaseDefense,
+        BaseSpeed = BaseSpeed,
+        MinMovement = MinMovement,
+        MaxMovement = MaxMovement,
+        BaseMovementType = BaseMovementType,
+        Keywords = new List<CardKeywordValue>(Keywords.Select(k => new CardKeywordValue(k.Keyword, k.Value))),
+        BaseCooldown = BaseCooldown,
+        SlotOne = new UpgradeSlot { IsUnlocked = SlotOne.IsUnlocked, UpgradeType = SlotOne.UpgradeType, StatBonus = SlotOne.StatBonus, KeywordAdded = SlotOne.KeywordAdded, CooldownReduction = SlotOne.CooldownReduction },
+        SlotTwo = new UpgradeSlot { IsUnlocked = SlotTwo.IsUnlocked, UpgradeType = SlotTwo.UpgradeType, StatBonus = SlotTwo.StatBonus, KeywordAdded = SlotTwo.KeywordAdded, CooldownReduction = SlotTwo.CooldownReduction },
+        MinRange = MinRange,
+        MaxRange = MaxRange,
+        RequiresOpponentLocationDamaged = RequiresOpponentLocationDamaged,
+        RequiresOpponentMinState = RequiresOpponentMinState,
+        Standalone = Standalone,
+        PrimaryTarget = PrimaryTarget,
+        SecondaryTarget = SecondaryTarget,
+    };
 }

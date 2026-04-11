@@ -34,6 +34,7 @@ public class Game1 : Game
         // Register all screens
         _screens[ScreenType.MainMenu]          = new MainMenuScreen();
         _screens[ScreenType.FighterSelect]     = new FighterSelectScreen();
+        _screens[ScreenType.StageSelect]       = new StageSelectScreen();
         _screens[ScreenType.Fight]             = new FightScreen();
         _screens[ScreenType.PostMatch]         = new PostMatchScreen();
         _screens[ScreenType.UpgradeTree]       = new UpgradeTreeScreen();

@@ -47,6 +47,10 @@ public class FightScreen : GameScreen
 
     // Round log for display
     private List<string> _roundLog = new();
+    // Pre-round effect log (stage effects applied before card selection)
+    private List<string> _preRoundLog = new();
+    // Resign confirmation state
+    private bool _resignPending = false;
     private KeyboardState _prevKeys;
     private MouseState _prevMouse;
 
@@ -73,11 +77,24 @@ public class FightScreen : GameScreen
 
         FighterDefinition fighterDefA;
         FighterDefinition fighterDefB;
+        Models.Stage.StageModifier selectedStage = Models.Stage.ExhibitionStage.Instance;
 
-        if (data is ValueTuple<FighterDefinition, FighterDefinition, string> localPvp)
+        if (data is ValueTuple<FighterDefinition, FighterDefinition, string, Models.Stage.StageModifier> localPvpStage)
+        {
+            _isLocalPvP = true;
+            (fighterDefA, fighterDefB, _matchType, var stageA) = localPvpStage;
+            selectedStage = stageA;
+        }
+        else if (data is ValueTuple<FighterDefinition, FighterDefinition, string> localPvp)
         {
             _isLocalPvP = true;
             (fighterDefA, fighterDefB, _matchType) = localPvp;
+        }
+        else if (data is ValueTuple<FighterDefinition, string, Models.Stage.StageModifier> pveStage)
+        {
+            _isLocalPvP = false;
+            (fighterDefA, _matchType, selectedStage) = pveStage;
+            fighterDefB = GrantsFighter.CreateDefinition();
         }
         else
         {
@@ -114,6 +131,7 @@ public class FightScreen : GameScreen
                 "pvp_local"  => MatchType.PvpCasual,
                 _            => MatchType.PvE,
             },
+            Stage = selectedStage,
             FighterA = playerFighter,
             FighterB = p2Fighter,
             FighterAIsHuman = true,
@@ -172,6 +190,18 @@ public class FightScreen : GameScreen
 
             // Update hover detection
             UpdateCardHover(mouse, gameTime);
+
+            // Resign confirmation overlay takes full priority
+            if (_resignPending)
+            {
+                if (IsPressed(keys, _prevKeys, Keys.Y))
+                    Resign();
+                else if (IsPressed(keys, _prevKeys, Keys.N) || IsPressed(keys, _prevKeys, Keys.Escape))
+                    _resignPending = false;
+                _prevKeys = keys;
+                _prevMouse = mouse;
+                return;
+            }
 
             if (_match.Phase == MatchPhase.CardSelection && !_playerCommitted)
             {
@@ -339,9 +369,32 @@ public class FightScreen : GameScreen
             else if (_match.Phase == MatchPhase.RoundResult)
             {
                 if (IsPressed(keys, _prevKeys, Keys.Enter) || IsPressed(keys, _prevKeys, Keys.Space))
+                    StartNewRound();
+            }
+            else if (_match.Phase == MatchPhase.StageChoiceA)
+            {
+                if (IsPressed(keys, _prevKeys, Keys.Y))
                 {
-                    _match.Phase = MatchPhase.CardSelection;
-                    LoadAvailablePairs();
+                    _match.Stage.OnFighterChoice(_match.FighterA, true, _match, _match.StageState);
+                    AdvanceStageChoices(skipA: true);
+                }
+                else if (IsPressed(keys, _prevKeys, Keys.N))
+                {
+                    _match.Stage.OnFighterChoice(_match.FighterA, false, _match, _match.StageState);
+                    AdvanceStageChoices(skipA: true);
+                }
+            }
+            else if (_match.Phase == MatchPhase.StageChoiceB)
+            {
+                if (IsPressed(keys, _prevKeys, Keys.Y))
+                {
+                    _match.Stage.OnFighterChoice(_match.FighterB, true, _match, _match.StageState);
+                    EnterCardSelection();
+                }
+                else if (IsPressed(keys, _prevKeys, Keys.N))
+                {
+                    _match.Stage.OnFighterChoice(_match.FighterB, false, _match, _match.StageState);
+                    EnterCardSelection();
                 }
             }
             else if (_match.Phase == MatchPhase.MatchOver)
@@ -351,7 +404,12 @@ public class FightScreen : GameScreen
             }
 
             if (IsPressed(keys, _prevKeys, Keys.Escape))
-                SwitchTo(ScreenType.MainMenu);
+            {
+                if (_match.Phase == MatchPhase.MatchOver)
+                    HandleMatchEnd();
+                else
+                    _resignPending = true;
+            }
 
             _prevKeys = keys;
             _prevMouse = mouse;
@@ -470,9 +528,58 @@ public class FightScreen : GameScreen
         // ResolveSecondHalf will be called when the player presses Enter/Space.
     }
 
+    private void StartNewRound()
+    {
+        _preRoundLog.Clear();
+        _match.Stage.ApplyPreRoundEffects(_match.FighterA, _match, _match.StageState, _preRoundLog);
+        _match.Stage.ApplyPreRoundEffects(_match.FighterB, _match, _match.StageState, _preRoundLog);
+        AdvanceStageChoices(skipA: false);
+    }
+
+    private void AdvanceStageChoices(bool skipA)
+    {
+        if (!skipA && _match.Stage.RequiresRoundStartChoice(_match.FighterA, _match, _match.StageState))
+        {
+            if (_match.FighterAIsHuman)
+            {
+                _match.Phase = MatchPhase.StageChoiceA;
+                return;
+            }
+            bool aiA = _match.Stage.ResolveAiChoice(_match.FighterA, _match, _match.StageState);
+            _match.Stage.OnFighterChoice(_match.FighterA, aiA, _match, _match.StageState);
+        }
+
+        if (_match.Stage.RequiresRoundStartChoice(_match.FighterB, _match, _match.StageState))
+        {
+            if (_match.FighterBIsHuman)
+            {
+                _match.Phase = MatchPhase.StageChoiceB;
+                return;
+            }
+            bool aiB = _match.Stage.ResolveAiChoice(_match.FighterB, _match, _match.StageState);
+            _match.Stage.OnFighterChoice(_match.FighterB, aiB, _match, _match.StageState);
+        }
+
+        EnterCardSelection();
+    }
+
+    private void EnterCardSelection()
+    {
+        _match.Phase = MatchPhase.CardSelection;
+        LoadAvailablePairs();
+    }
+
+    private void Resign()
+    {
+        _resignPending = false;
+        _match.Winner = _match.FighterB;
+        _match.Loser = _match.FighterA;
+        _match.Phase = MatchPhase.MatchOver;
+    }
+
     private void HandleMatchEnd()
     {
-        bool won = _match.Winner == _match.FighterA;
+        bool won = !_match.IsDraw && _match.Winner == _match.FighterA;
         SwitchTo(ScreenType.PostMatch, (_match, won));
     }
 
@@ -487,9 +594,14 @@ public class FightScreen : GameScreen
             DrawCardSelection(sb);
             DrawOpponentCards(sb);
             DrawRoundLog(sb);
+            DrawStageChoicePrompt(sb);
+            DrawStageHud(sb);
 
             if (_match.Phase == MatchPhase.MatchOver)
                 DrawMatchOver(sb);
+
+            if (_resignPending)
+                DrawResignConfirm(sb);
 
             // Draw tooltip last (on top)
             if (_hoverTime >= HoverDelay && _hoveredCard != null)
@@ -510,6 +622,66 @@ public class FightScreen : GameScreen
         }
     }
 
+    private void DrawStageHud(SpriteBatch sb)
+    {
+        var lines = _match.Stage.GetHudDisplayInfo(_match.StageState);
+        if (lines.Count == 0) return;
+
+        int screenW = Game.GraphicsDevice.Viewport.Width;
+        int y = Game.GraphicsDevice.Viewport.Height - 50;
+        // Concatenate all lines centered across the bottom
+        string text = string.Join("  |  ", lines);
+        float tw = _smallFont.MeasureString(text).X;
+        sb.DrawString(_smallFont, text, new Vector2((screenW - tw) / 2f, y), new Color(180, 220, 255));
+    }
+
+    private void DrawStageChoicePrompt(SpriteBatch sb)
+    {
+        if (_match.Phase != MatchPhase.StageChoiceA && _match.Phase != MatchPhase.StageChoiceB)
+            return;
+
+        bool isA = _match.Phase == MatchPhase.StageChoiceA;
+        var fighter = isA ? _match.FighterA : _match.FighterB;
+        string fighterLabel = isA ? (_isLocalPvP ? "Player 1" : "Player") : "Player 2";
+
+        int cx = Game.GraphicsDevice.Viewport.Width / 2;
+        int logX = 20, logY = 560;
+
+        // Show pre-round token damage log
+        for (int i = 0; i < Math.Min(_preRoundLog.Count, 6); i++)
+        {
+            var filtered = new System.Text.StringBuilder();
+            foreach (char c in _preRoundLog[i])
+            {
+                if (c >= 32 && c <= 126) filtered.Append(c);
+                else if (c == '\n' || c == '\t') filtered.Append(' ');
+            }
+            sb.DrawString(_smallFont, filtered.ToString(), new Vector2(logX, logY + i * 14), new Color(220, 180, 100));
+        }
+
+        // Choice prompt
+        int promptY = Game.GraphicsDevice.Viewport.Height / 2 - 30;
+        string header  = $"{fighterLabel}: Make your choice";
+        string prompt  = _match.Stage.GetChoicePrompt(fighter, _match.StageState);
+        string keyHint = "[Y] Yes   [N] No";
+
+        var filteredPrompt = new System.Text.StringBuilder();
+        foreach (char c in prompt)
+        {
+            if (c >= 32 && c <= 126) filteredPrompt.Append(c);
+            else if (c == '\n' || c == '\t') filteredPrompt.Append(' ');
+        }
+        string safePrompt = filteredPrompt.ToString();
+
+        float headerW  = _font.MeasureString(header).X;
+        float promptW  = _smallFont.MeasureString(safePrompt).X;
+        float keysW    = _smallFont.MeasureString(keyHint).X;
+
+        sb.DrawString(_font,      header,     new Vector2(cx - headerW / 2,  promptY),      Color.Gold);
+        sb.DrawString(_smallFont, safePrompt, new Vector2(cx - promptW / 2,  promptY + 28), Color.White);
+        sb.DrawString(_smallFont, keyHint,    new Vector2(cx - keysW  / 2,   promptY + 50), Color.Yellow);
+    }
+
     private void DrawBoard(SpriteBatch sb)
     {
         foreach (var cell in _match.Board.AllCells)
@@ -528,6 +700,17 @@ public class FightScreen : GameScreen
             }
 
             DrawHex(sb, (int)px, (int)py, (int)HexSize - 2, hexColor);
+        }
+
+        // Draw stage hazardous hexes (tokens, etc.) — orange/gold, rendered under fighters
+        var hazardHexes = _match.Stage.GetHazardousHexes(_match.StageState);
+        foreach (var hh in hazardHexes)
+        {
+            if (_match.Board.IsValid(hh))
+            {
+                var (hpx, hpy) = Models.Board.HexBoard.HexToPixel(hh, HexSize, BoardOriginX, BoardOriginY);
+                DrawHex(sb, (int)hpx, (int)hpy, (int)HexSize - 6, new Color(200, 140, 40));
+            }
         }
 
         // Fighter A position
@@ -926,13 +1109,34 @@ public class FightScreen : GameScreen
     {
         int cx = Game.GraphicsDevice.Viewport.Width / 2;
         int cy = Game.GraphicsDevice.Viewport.Height / 2;
-        bool won = _match.Winner == _match.FighterA;
-        string result = won ? "You Win!_pl" : "You Lose!_pl";
-        Color col = won ? Color.Gold : Color.OrangeRed;
+        string result;
+        Color col;
+        if (_match.IsDraw)
+        {
+            result = "Draw!";
+            col = Color.LightYellow;
+        }
+        else
+        {
+            bool won = _match.Winner == _match.FighterA;
+            result = won ? "You Win!" : "You Lose!";
+            col = won ? Color.Gold : Color.OrangeRed;
+        }
         var sz = _font.MeasureString(result);
         sb.DrawString(_font, result, new Vector2(cx - sz.X / 2, cy - 20), col);
-        sb.DrawString(_smallFont, "[Enter] Continue",
-            new Vector2(cx - _smallFont.MeasureString("[Enter] Continue").X / 2, cy + 20), Color.White);
+        sb.DrawString(_smallFont, "[Enter] / [Esc] Continue",
+            new Vector2(cx - _smallFont.MeasureString("[Enter] / [Esc] Continue").X / 2, cy + 20), Color.White);
+    }
+
+    private void DrawResignConfirm(SpriteBatch sb)
+    {
+        int cx = Game.GraphicsDevice.Viewport.Width / 2;
+        int cy = Game.GraphicsDevice.Viewport.Height / 2;
+        sb.Draw(_pixel, new Rectangle(cx - 210, cy - 55, 420, 110), Color.Black * 0.75f);
+        string title = _isLocalPvP ? "Player 1 - Resign?" : "Resign?";
+        string hint  = "[Y] Yes, resign   [N] / [Esc] Cancel";
+        sb.DrawString(_font,      title, new Vector2(cx - _font.MeasureString(title).X / 2,      cy - 40), Color.OrangeRed);
+        sb.DrawString(_smallFont, hint,  new Vector2(cx - _smallFont.MeasureString(hint).X / 2,  cy + 5),  Color.White);
     }
 
     // Simple filled hex approximation using filled rectangle + rotated quads is complex in MB,

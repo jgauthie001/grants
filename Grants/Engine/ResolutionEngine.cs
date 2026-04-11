@@ -211,7 +211,10 @@ public static class ResolutionEngine
         {
             match.Phase = MatchPhase.MatchOver;
             if (aKO && bKO)
+            {
+                match.IsDraw = true;
                 round.Log.Add("Double KO! Match is a draw.");
+            }
             else if (aKO)
             {
                 match.Winner = fb;
@@ -227,7 +230,23 @@ public static class ResolutionEngine
         }
         else
         {
-            match.Phase = MatchPhase.RoundResult;
+            // ===== STALEMATE CHECK =====
+            bool anyDamage = round.DamageToA.Count > 0 || round.DamageToB.Count > 0;
+            if (anyDamage)
+                match.ConsecutiveNoDamageRounds = 0;
+            else
+                match.ConsecutiveNoDamageRounds++;
+
+            if (match.ConsecutiveNoDamageRounds >= 5)
+            {
+                match.Phase = MatchPhase.MatchOver;
+                match.IsDraw = true;
+                round.Log.Add("Draw! No damage dealt in 5 consecutive rounds.");
+            }
+            else
+            {
+                match.Phase = MatchPhase.RoundResult;
+            }
         }
 
         // --- Stage + Persona hooks: round complete ---

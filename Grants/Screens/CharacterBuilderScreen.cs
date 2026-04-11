@@ -15,7 +15,7 @@ namespace Grants.Screens;
 /// </summary>
 public class CharacterBuilderScreen : GameScreen
 {
-    private enum EditMode { FighterSelect, CreateCharacter, CardTypeSelect, CardSelect, StatEdit, CardNameEdit, KeywordEdit, KeywordValueEdit, UpgradeSelect }
+    private enum EditMode { FighterSelect, CreateCharacter, CardTypeSelect, CardSelect, StatEdit, CardNameEdit, KeywordEdit, KeywordValueEdit, UpgradeSelect, PoolBrowse }
 
     private SpriteFont _font = null!;
     private SpriteFont _smallFont = null!;
@@ -50,6 +50,10 @@ public class CharacterBuilderScreen : GameScreen
 
     // Character creation
     private string _newCharacterName = "";
+
+    // Card pool browsing
+    private List<CardBase> _poolCards = new();
+    private int _poolIndex = 0;
 
     // Upgrade selection
     private List<CardBase> _cardsNeedingUpgrades = new();
@@ -109,6 +113,9 @@ public class CharacterBuilderScreen : GameScreen
                     break;
                 case EditMode.UpgradeSelect:
                     UpdateUpgradeSelect(keys);
+                    break;
+                case EditMode.PoolBrowse:
+                    UpdatePoolBrowse(keys);
                     break;
             }
         }
@@ -243,17 +250,36 @@ public class CharacterBuilderScreen : GameScreen
 
     private void UpdateCardSelect(KeyboardState keys)
     {
+        int totalItems = _currentCards.Count + 1; // +1 for [+ Add from Pool]
         if (IsPressed(keys, _prevKeys, Keys.Up) || IsPressed(keys, _prevKeys, Keys.W))
-            _cardIndex = (_cardIndex - 1 + _currentCards.Count) % _currentCards.Count;
+            _cardIndex = (_cardIndex - 1 + totalItems) % totalItems;
 
         if (IsPressed(keys, _prevKeys, Keys.Down) || IsPressed(keys, _prevKeys, Keys.S))
-            _cardIndex = (_cardIndex + 1) % _currentCards.Count;
+            _cardIndex = (_cardIndex + 1) % totalItems;
 
         if (IsPressed(keys, _prevKeys, Keys.Enter))
         {
-            _selectedCard = _currentCards[_cardIndex];
-            _mode = EditMode.StatEdit;
-            _statIndex = 0;
+            if (_cardIndex == _currentCards.Count)
+            {
+                // [+ Add from Pool] selected
+                LoadPoolForType();
+                _poolIndex = 0;
+                _mode = EditMode.PoolBrowse;
+            }
+            else
+            {
+                _selectedCard = _currentCards[_cardIndex];
+                _mode = EditMode.StatEdit;
+                _statIndex = 0;
+            }
+        }
+
+        // Delete removes the selected card from the fighter
+        if (IsPressed(keys, _prevKeys, Keys.Delete) && _cardIndex < _currentCards.Count)
+        {
+            RemoveCardFromFighter(_currentCards[_cardIndex]);
+            LoadCardsForType();
+            _cardIndex = Math.Min(_cardIndex, _currentCards.Count);
         }
 
         if (IsPressed(keys, _prevKeys, Keys.Back))
@@ -445,21 +471,187 @@ public class CharacterBuilderScreen : GameScreen
 
     private FighterDefinition CreateNewFighterFromTemplate(string fighterName)
     {
-        // Clone the Grants fighter as a template
-        var template = GrantsFighter.CreateDefinition();
-        
+        string id = $"custom_{Guid.NewGuid().ToString()[..8]}";
         return new FighterDefinition
         {
-            Id = $"custom_{Guid.NewGuid().ToString().Substring(0, 8)}",
+            Id = id,
             Name = fighterName,
             Description = "A custom fighter created in the Character Builder.",
-            GenericCards = new List<GenericCard>(template.GenericCards),
-            UniqueCards = new List<UniqueCard>(template.UniqueCards),
-            SpecialCards = new List<SpecialCard>(template.SpecialCards),
-            CriticalLocations = new List<BodyLocation>(template.CriticalLocations),
-            KOThreshold = template.KOThreshold,
-            RankedUnlockWins = template.RankedUnlockWins,
+            GenericCards = new(),
+            UniqueCards = new(),
+            SpecialCards = new(),
+            CriticalLocations = new() { BodyLocation.Head, BodyLocation.Torso },
+            KOThreshold = 2,
+            RankedUnlockWins = 15,
         };
+    }
+
+    private void LoadPoolForType()
+    {
+        _poolCards.Clear();
+        switch (_cardTypeIndex)
+        {
+            case 0: _poolCards.AddRange(CardPool.Generics); break;
+            case 1: _poolCards.AddRange(CardPool.Uniques);  break;
+            case 2: _poolCards.AddRange(CardPool.Specials); break;
+        }
+    }
+
+    private void AddCardFromPool(CardBase template)
+    {
+        if (_selectedFighter == null || HasCardFromPool(template)) return;
+        switch (template)
+        {
+            case GenericCard g: _selectedFighter.GenericCards.Add(CardPool.CloneGeneric(g, _selectedFighter.Id)); break;
+            case UniqueCard  u: _selectedFighter.UniqueCards.Add(CardPool.CloneUnique(u,   _selectedFighter.Id)); break;
+            case SpecialCard s: _selectedFighter.SpecialCards.Add(CardPool.CloneSpecial(s, _selectedFighter.Id)); break;
+        }
+    }
+
+    private void RemoveCardFromFighter(CardBase card)
+    {
+        if (_selectedFighter == null) return;
+        switch (card)
+        {
+            case GenericCard g: _selectedFighter.GenericCards.Remove(g); break;
+            case UniqueCard  u: _selectedFighter.UniqueCards.Remove(u);  break;
+            case SpecialCard s: _selectedFighter.SpecialCards.Remove(s); break;
+        }
+    }
+
+    private bool HasCardFromPool(CardBase template)
+    {
+        if (_selectedFighter == null) return false;
+        string sid = _selectedFighter.Id;
+        string newId = template.Id.StartsWith(sid + "_") ? template.Id : $"{sid}_{template.Id}";
+        return _selectedFighter.AllCards.Any(c => c.Id == newId);
+    }
+
+    private CardBase? CreateBlankCardForType(int cardTypeIndex)
+    {
+        if (_selectedFighter == null) return null;
+        string uid = $"{_selectedFighter.Id}_new_{Guid.NewGuid().ToString()[..6]}";
+        return cardTypeIndex switch
+        {
+            0 => new GenericCard
+            {
+                Id = uid,
+                Name = "New Generic",
+                Description = "",
+                BodyPart = BodyPart.Torso,
+                SatisfiesTags = new() { "upper", "body" },
+                BasePower = 1, BaseDefense = 1, BaseSpeed = 0,
+                MaxMovement = 0, BaseCooldown = 1,
+            },
+            1 => new UniqueCard
+            {
+                Id = uid,
+                Name = "New Unique",
+                Description = "",
+                BasePower = 2, BaseDefense = 1, BaseSpeed = 0,
+                MaxMovement = 0, MinRange = 1, MaxRange = 1, BaseCooldown = 2,
+            },
+            2 => new SpecialCard
+            {
+                Id = uid,
+                Name = "New Special",
+                Description = "",
+                BasePower = 4, BaseDefense = 0, BaseSpeed = -1,
+                MaxMovement = 0, MinRange = 1, MaxRange = 1, BaseCooldown = 3,
+                Standalone = true,
+            },
+            _ => null,
+        };
+    }
+
+    private void UpdatePoolBrowse(KeyboardState keys)
+    {
+        int totalItems = _poolCards.Count + 1; // +1 for [Create New Card]
+
+        if (IsPressed(keys, _prevKeys, Keys.Up) || IsPressed(keys, _prevKeys, Keys.W))
+            _poolIndex = (_poolIndex - 1 + totalItems) % totalItems;
+        if (IsPressed(keys, _prevKeys, Keys.Down) || IsPressed(keys, _prevKeys, Keys.S))
+            _poolIndex = (_poolIndex + 1) % totalItems;
+
+        if (IsPressed(keys, _prevKeys, Keys.Enter))
+        {
+            if (_poolIndex == _poolCards.Count)
+            {
+                // Create a blank card, add it directly, then open stat editor on it
+                var newCard = CreateBlankCardForType(_cardTypeIndex);
+                if (newCard != null)
+                {
+                    switch (newCard)
+                    {
+                        case GenericCard g: _selectedFighter!.GenericCards.Add(g); break;
+                        case UniqueCard  u: _selectedFighter!.UniqueCards.Add(u);  break;
+                        case SpecialCard s: _selectedFighter!.SpecialCards.Add(s); break;
+                    }
+                    LoadCardsForType();
+                    _selectedCard = newCard;
+                    _statIndex = 0;
+                    _mode = EditMode.StatEdit;
+                }
+            }
+            else if (_poolCards.Count > 0)
+            {
+                AddCardFromPool(_poolCards[_poolIndex]);
+                LoadCardsForType();
+                _cardIndex = Math.Max(0, _currentCards.Count - 1);
+                _mode = EditMode.CardSelect;
+            }
+        }
+
+        if (IsPressed(keys, _prevKeys, Keys.Back) || IsPressed(keys, _prevKeys, Keys.Escape))
+            _mode = EditMode.CardSelect;
+    }
+
+    private void DrawPoolBrowse(SpriteBatch sb)
+    {
+        int x = 100, y = 100;
+        sb.DrawString(_smallFont, $"Pool - {_cardTypes[_cardTypeIndex]} Cards  ({_poolCards.Count} available)", new Vector2(x, y), Color.Yellow);
+        y += 30;
+
+        for (int i = 0; i < _poolCards.Count; i++)
+        {
+            bool sel = i == _poolIndex;
+            bool has = HasCardFromPool(_poolCards[i]);
+            Color c = has ? Color.DimGray : (sel ? Color.Yellow : Color.LightGray);
+            string already = has ? " (added)" : "";
+            string label = $"{(sel ? ">" : " ")} {_poolCards[i].Name}{already}";
+            sb.DrawString(_smallFont, label, new Vector2(x, y + i * 20), c);
+        }
+
+        bool createSel = _poolIndex == _poolCards.Count;
+        sb.DrawString(_smallFont,
+            $"{(createSel ? ">" : " ")} [Create New Card]",
+            new Vector2(x, y + _poolCards.Count * 20),
+            createSel ? Color.Cyan : Color.DimGray);
+
+        // Stats preview of the highlighted pool card (not shown for Create New)
+        if (_poolIndex < _poolCards.Count)
+            {
+                var card = _poolCards[_poolIndex];
+                int px = 450, py = 100;
+                sb.DrawString(_smallFont, "--- Preview ---", new Vector2(px, py), Color.White); py += 20;
+                sb.DrawString(_smallFont, $"Power:   {card.BasePower}",   new Vector2(px, py), Color.LightGray); py += 18;
+                sb.DrawString(_smallFont, $"Defense: {card.BaseDefense}", new Vector2(px, py), Color.LightGray); py += 18;
+                sb.DrawString(_smallFont, $"Speed:   {card.BaseSpeed}",   new Vector2(px, py), Color.LightGray); py += 18;
+                sb.DrawString(_smallFont, $"CD:      {card.BaseCooldown}", new Vector2(px, py), Color.LightGray); py += 18;
+                if (card is UniqueCard uc)
+                    { sb.DrawString(_smallFont, $"Range:   {uc.MinRange}-{uc.MaxRange}", new Vector2(px, py), Color.LightGray); py += 18; }
+                if (card is SpecialCard sc)
+                    { sb.DrawString(_smallFont, $"Range:   {sc.MinRange}-{sc.MaxRange}", new Vector2(px, py), Color.LightGray); py += 18; }
+                if (card.Keywords.Count > 0)
+                {
+                    sb.DrawString(_smallFont, "Keywords:", new Vector2(px, py), Color.LightGray); py += 18;
+                    foreach (var kw in card.Keywords)
+                        { sb.DrawString(_smallFont, $"  {kw}", new Vector2(px, py), Color.Cyan); py += 16; }
+                }
+        }
+
+        y += (_poolCards.Count + 1) * 20 + 20;
+        sb.DrawString(_smallFont, "[Up/Down] Browse   [Enter] Add / Create   [Backspace] Back", new Vector2(x, y), Color.DimGray);
     }
 
     private void LoadCardsForType()
@@ -543,6 +735,9 @@ public class CharacterBuilderScreen : GameScreen
             case EditMode.UpgradeSelect:
                 DrawUpgradeSelect(sb);
                 break;
+            case EditMode.PoolBrowse:
+                DrawPoolBrowse(sb);
+                break;
         }
 
         sb.DrawString(_smallFont, "[Backspace] Main Menu", new Vector2(20, Game.GraphicsDevice.Viewport.Height - 30), Color.DimGray);
@@ -620,8 +815,15 @@ public class CharacterBuilderScreen : GameScreen
             sb.DrawString(_smallFont, label, new Vector2(x, y + i * 20), c);
         }
 
-        y += Math.Max(1, _currentCards.Count) * 20 + 30;
-        sb.DrawString(_smallFont, "[Up/Down] Navigate   [Enter] Edit   [Backspace] Back", new Vector2(x, y), Color.DimGray);
+        bool poolSel = _cardIndex == _currentCards.Count;
+        sb.DrawString(_smallFont,
+            $"{(poolSel ? ">" : " ")} [+ Add from Pool]",
+            new Vector2(x, y + _currentCards.Count * 20),
+            poolSel ? Color.Cyan : Color.DimGray);
+
+        y += (_currentCards.Count + 1) * 20 + 20;
+        string delHint = (_cardIndex < _currentCards.Count && _currentCards.Count > 0) ? "   [Del] Remove" : "";
+        sb.DrawString(_smallFont, $"[Up/Down] Navigate   [Enter] Edit   [Backspace] Back{delHint}", new Vector2(x, y), Color.DimGray);
     }
 
     private void DrawStatEdit(SpriteBatch sb)

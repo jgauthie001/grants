@@ -37,7 +37,7 @@ public class MainMenuScreen : GameScreen
         if (IsPressed(keys, _prevKeys, Keys.Enter) || IsPressed(keys, _prevKeys, Keys.Space))
             HandleSelection();
 
-        if (IsPressed(keys, _prevKeys, Keys.Escape))
+        if (IsPressed(keys, _prevKeys, Keys.F6))
             Game.Exit();
 
         _prevKeys = keys;
@@ -86,7 +86,7 @@ public class MainMenuScreen : GameScreen
         }
 
         // Footer
-        string footer = "[Up/Down] Navigate   [Enter] Select   [Esc] Quit";
+        string footer = "[Up/Down] Navigate   [Enter] Select   [F6] Quit";
         var footerSize = _smallFont.MeasureString(footer);
         sb.DrawString(_smallFont, footer,
             new Vector2(cx - footerSize.X / 2, Game.GraphicsDevice.Viewport.Height - 30),

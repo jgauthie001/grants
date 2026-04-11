@@ -80,11 +80,11 @@ public class FighterSelectScreen : GameScreen
 
         if (_matchType == "pvp_local" && _selectingP2)
         {
-            SwitchTo(ScreenType.Fight, (_p1Selection!, fighter, "pvp_local"));
+            SwitchTo(ScreenType.StageSelect, (_p1Selection!, fighter, "pvp_local"));
             return;
         }
 
-        SwitchTo(ScreenType.Fight, (fighter, _matchType));
+        SwitchTo(ScreenType.StageSelect, (fighter, _matchType));
     }
 
     public override void Draw(GameTime gameTime, SpriteBatch sb)

@@ -97,6 +97,50 @@ public abstract class StageModifier
     {
         return new();
     }
+
+    // ─── Per-round choice hooks ────────────────────────────────────────────────
+
+    /// <summary>
+    /// Return true if this stage requires a per-round choice from the given fighter
+    /// before card selection begins. Called at the start of each new round.
+    /// </summary>
+    public virtual bool RequiresRoundStartChoice(
+        FighterInstance fighter,
+        MatchState match,
+        StageState state) => false;
+
+    /// <summary>
+    /// One-line prompt shown to the human player when a choice is required.
+    /// </summary>
+    public virtual string GetChoicePrompt(FighterInstance fighter, StageState state) => "";
+
+    /// <summary>
+    /// AI decision when a choice is required. Return true to accept, false to decline.
+    /// </summary>
+    public virtual bool ResolveAiChoice(
+        FighterInstance fighter,
+        MatchState match,
+        StageState state) => false;
+
+    /// <summary>
+    /// Called once the fighter (human or AI) has made their choice.
+    /// </summary>
+    public virtual void OnFighterChoice(
+        FighterInstance fighter,
+        bool accepted,
+        MatchState match,
+        StageState state) { }
+
+    /// <summary>
+    /// Apply any token-damage or pre-round effects for a fighter.
+    /// Called at the very start of a new round (before choices and before card selection).
+    /// Logs go into a standalone list because the RoundState doesn't exist yet.
+    /// </summary>
+    public virtual void ApplyPreRoundEffects(
+        FighterInstance fighter,
+        MatchState match,
+        StageState state,
+        List<string> log) { }
 }
 
 /// <summary>

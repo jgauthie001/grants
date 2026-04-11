@@ -174,6 +174,15 @@ public static class AttackEngine
         // --- Apply damage ---
         defender.LocationStates[result.TargetLocation].ApplyDamage(result.NetDamageSteps);
 
+        // Record last hit location so stage hooks can reference it
+        bool defenderIsA = round.PairA != null && ReferenceEquals(defender, null)
+            ? false
+            : round.PairB != null && !ReferenceEquals(attackerPair, round.PairA);
+        if (ReferenceEquals(attackerPair, round.PairA))
+            round.LastHitOnB = result.TargetLocation;
+        else
+            round.LastHitOnA = result.TargetLocation;
+
         return result;
     }
 

@@ -7,6 +7,7 @@ public enum ScreenType
 {
     MainMenu,
     FighterSelect,
+    StageSelect,
     Fight,
     PostMatch,
     UpgradeTree,

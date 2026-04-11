@@ -14,6 +14,8 @@ public enum MatchPhase
     ResolutionAttack,   // Applying attacks in speed order
     RoundMidpoint,      // Pause after first fighter acts, before second
     RoundResult,        // Displaying round outcome before next round
+    StageChoiceA,       // Stage-specific choice prompt for Fighter A
+    StageChoiceB,       // Stage-specific choice prompt for Fighter B
     MatchOver,          // One fighter KO'd
 }
 
@@ -62,6 +64,10 @@ public class RoundState
     public bool FighterAMissed { get; set; } = false;
     public bool FighterBMissed { get; set; } = false;
 
+    // Most recent location hit on each fighter (used by stage hooks for damage reduction)
+    public BodyLocation? LastHitOnA { get; set; } = null;
+    public BodyLocation? LastHitOnB { get; set; } = null;
+
     // How many log lines belong to the first fighter's action (for mid-round pause display)
     public int FirstHalfLogCount { get; set; } = 0;
 }
@@ -100,7 +106,11 @@ public class MatchState
     // Match result
     public FighterInstance? Winner { get; set; }
     public FighterInstance? Loser { get; set; }
+    public bool IsDraw { get; set; } = false;
     public bool IsOver => Phase == MatchPhase.MatchOver;
+
+    // Stalemate tracking: incremented each round nobody takes damage
+    public int ConsecutiveNoDamageRounds { get; set; } = 0;
 
     public RoundState? CurrentRoundState { get; set; }
 

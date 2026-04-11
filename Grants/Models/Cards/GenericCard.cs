@@ -45,4 +45,26 @@ public class GenericCard : CardBase
     /// +1 means maximum range is increased by 1 (e.g., 3→4, extended reach)
     /// </summary>
     public int MaxRangeModifier { get; set; } = 0;
+
+    /// <summary>Deep-clones this card. Pass a new ID, or null to keep the same ID.</summary>
+    public GenericCard Clone(string? newId = null) => new GenericCard
+    {
+        Id = newId ?? Id,
+        Name = Name,
+        Description = Description,
+        BasePower = BasePower,
+        BaseDefense = BaseDefense,
+        BaseSpeed = BaseSpeed,
+        MinMovement = MinMovement,
+        MaxMovement = MaxMovement,
+        BaseMovementType = BaseMovementType,
+        Keywords = new List<CardKeywordValue>(Keywords.Select(k => new CardKeywordValue(k.Keyword, k.Value))),
+        BaseCooldown = BaseCooldown,
+        SlotOne = new UpgradeSlot { IsUnlocked = SlotOne.IsUnlocked, UpgradeType = SlotOne.UpgradeType, StatBonus = SlotOne.StatBonus, KeywordAdded = SlotOne.KeywordAdded, CooldownReduction = SlotOne.CooldownReduction },
+        SlotTwo = new UpgradeSlot { IsUnlocked = SlotTwo.IsUnlocked, UpgradeType = SlotTwo.UpgradeType, StatBonus = SlotTwo.StatBonus, KeywordAdded = SlotTwo.KeywordAdded, CooldownReduction = SlotTwo.CooldownReduction },
+        BodyPart = BodyPart,
+        SatisfiesTags = new List<string>(SatisfiesTags),
+        MinRangeModifier = MinRangeModifier,
+        MaxRangeModifier = MaxRangeModifier,
+    };
 }
