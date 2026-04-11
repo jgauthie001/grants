@@ -397,6 +397,65 @@ public class FightScreen : GameScreen
                     EnterCardSelection();
                 }
             }
+            else if (_match.Phase == MatchPhase.PersonaChoiceA)
+            {
+                if (IsPressed(keys, _prevKeys, Keys.Y))
+                {
+                    _match.FighterB.Definition.Persona.OnOpponentChoice(
+                        _match.FighterB, _match.FighterA, true, _match, _match.FighterB.PersonaState);
+                    _preRoundLog.Add("You spend a Curse token (-1 Power / -1 Speed this round).");
+                    // FighterA's persona may also need to prompt FighterB
+                    if (_match.FighterA.Definition.Persona.RequiresOpponentRoundStartChoice(
+                            _match.FighterA, _match.FighterB, _match, _match.FighterA.PersonaState))
+                    {
+                        if (_match.FighterBIsHuman) { _match.Phase = MatchPhase.PersonaChoiceB; }
+                        else
+                        {
+                            bool aiB = _match.FighterA.Definition.Persona.ResolveAiOpponentChoice(
+                                _match.FighterA, _match.FighterB, _match, _match.FighterA.PersonaState);
+                            _match.FighterA.Definition.Persona.OnOpponentChoice(
+                                _match.FighterA, _match.FighterB, aiB, _match, _match.FighterA.PersonaState);
+                            EnterCardSelection();
+                        }
+                    }
+                    else EnterCardSelection();
+                }
+                else if (IsPressed(keys, _prevKeys, Keys.N))
+                {
+                    _match.FighterB.Definition.Persona.OnOpponentChoice(
+                        _match.FighterB, _match.FighterA, false, _match, _match.FighterB.PersonaState);
+                    if (_match.FighterA.Definition.Persona.RequiresOpponentRoundStartChoice(
+                            _match.FighterA, _match.FighterB, _match, _match.FighterA.PersonaState))
+                    {
+                        if (_match.FighterBIsHuman) { _match.Phase = MatchPhase.PersonaChoiceB; }
+                        else
+                        {
+                            bool aiB = _match.FighterA.Definition.Persona.ResolveAiOpponentChoice(
+                                _match.FighterA, _match.FighterB, _match, _match.FighterA.PersonaState);
+                            _match.FighterA.Definition.Persona.OnOpponentChoice(
+                                _match.FighterA, _match.FighterB, aiB, _match, _match.FighterA.PersonaState);
+                            EnterCardSelection();
+                        }
+                    }
+                    else EnterCardSelection();
+                }
+            }
+            else if (_match.Phase == MatchPhase.PersonaChoiceB)
+            {
+                if (IsPressed(keys, _prevKeys, Keys.Y))
+                {
+                    _match.FighterA.Definition.Persona.OnOpponentChoice(
+                        _match.FighterA, _match.FighterB, true, _match, _match.FighterA.PersonaState);
+                    _preRoundLog.Add("You spend a Curse token (-1 Power / -1 Speed this round).");
+                    EnterCardSelection();
+                }
+                else if (IsPressed(keys, _prevKeys, Keys.N))
+                {
+                    _match.FighterA.Definition.Persona.OnOpponentChoice(
+                        _match.FighterA, _match.FighterB, false, _match, _match.FighterA.PersonaState);
+                    EnterCardSelection();
+                }
+            }
             else if (_match.Phase == MatchPhase.MatchOver)
             {
                 if (IsPressed(keys, _prevKeys, Keys.Enter))
@@ -531,6 +590,11 @@ public class FightScreen : GameScreen
     private void StartNewRound()
     {
         _preRoundLog.Clear();
+        // Clear round-scoped stat modifiers left over from the previous round
+        _match.FighterA.RoundPowerModifier = 0;
+        _match.FighterA.RoundSpeedModifier = 0;
+        _match.FighterB.RoundPowerModifier = 0;
+        _match.FighterB.RoundSpeedModifier = 0;
         _match.Stage.ApplyPreRoundEffects(_match.FighterA, _match, _match.StageState, _preRoundLog);
         _match.Stage.ApplyPreRoundEffects(_match.FighterB, _match, _match.StageState, _preRoundLog);
         AdvanceStageChoices(skipA: false);
@@ -558,6 +622,43 @@ public class FightScreen : GameScreen
             }
             bool aiB = _match.Stage.ResolveAiChoice(_match.FighterB, _match, _match.StageState);
             _match.Stage.OnFighterChoice(_match.FighterB, aiB, _match, _match.StageState);
+        }
+
+        AdvancePersonaChoices();
+    }
+
+    private void AdvancePersonaChoices()
+    {
+        // FighterB's persona may offer FighterA a choice
+        if (_match.FighterB.Definition.Persona.RequiresOpponentRoundStartChoice(
+                _match.FighterB, _match.FighterA, _match, _match.FighterB.PersonaState))
+        {
+            if (_match.FighterAIsHuman)
+            {
+                _match.Phase = MatchPhase.PersonaChoiceA;
+                return;
+            }
+            bool aiA = _match.FighterB.Definition.Persona.ResolveAiOpponentChoice(
+                _match.FighterB, _match.FighterA, _match, _match.FighterB.PersonaState);
+            _match.FighterB.Definition.Persona.OnOpponentChoice(
+                _match.FighterB, _match.FighterA, aiA, _match, _match.FighterB.PersonaState);
+            if (aiA) _preRoundLog.Add($"[{_match.FighterB.DisplayName}] AI opponent spends a Curse token (-1 Power/-1 Speed).");
+        }
+
+        // FighterA's persona may offer FighterB a choice
+        if (_match.FighterA.Definition.Persona.RequiresOpponentRoundStartChoice(
+                _match.FighterA, _match.FighterB, _match, _match.FighterA.PersonaState))
+        {
+            if (_match.FighterBIsHuman)
+            {
+                _match.Phase = MatchPhase.PersonaChoiceB;
+                return;
+            }
+            bool aiB = _match.FighterA.Definition.Persona.ResolveAiOpponentChoice(
+                _match.FighterA, _match.FighterB, _match, _match.FighterA.PersonaState);
+            _match.FighterA.Definition.Persona.OnOpponentChoice(
+                _match.FighterA, _match.FighterB, aiB, _match, _match.FighterA.PersonaState);
+            if (aiB) _preRoundLog.Add($"[{_match.FighterA.DisplayName}] AI opponent spends a Curse token (-1 Power/-1 Speed).");
         }
 
         EnterCardSelection();
@@ -595,7 +696,9 @@ public class FightScreen : GameScreen
             DrawOpponentCards(sb);
             DrawRoundLog(sb);
             DrawStageChoicePrompt(sb);
+            DrawPersonaChoicePrompt(sb);
             DrawStageHud(sb);
+            DrawPersonaHud(sb);
 
             if (_match.Phase == MatchPhase.MatchOver)
                 DrawMatchOver(sb);
@@ -633,6 +736,75 @@ public class FightScreen : GameScreen
         string text = string.Join("  |  ", lines);
         float tw = _smallFont.MeasureString(text).X;
         sb.DrawString(_smallFont, text, new Vector2((screenW - tw) / 2f, y), new Color(180, 220, 255));
+    }
+
+    private void DrawPersonaChoicePrompt(SpriteBatch sb)
+    {
+        if (_match.Phase != MatchPhase.PersonaChoiceA && _match.Phase != MatchPhase.PersonaChoiceB)
+            return;
+
+        bool isA = _match.Phase == MatchPhase.PersonaChoiceA;
+        var promptingOwner = isA ? _match.FighterB : _match.FighterA;
+        var respondingFighter = isA ? _match.FighterA : _match.FighterB;
+        string fighterLabel = isA ? (_isLocalPvP ? "Player 1" : "Player") : "Player 2";
+
+        int cx = Game.GraphicsDevice.Viewport.Width / 2;
+        int logX = 20, logY = 560;
+
+        // Show pre-round log (token damage etc.)
+        for (int i = 0; i < Math.Min(_preRoundLog.Count, 6); i++)
+        {
+            var filtered = new System.Text.StringBuilder();
+            foreach (char c in _preRoundLog[i])
+            {
+                if (c >= 32 && c <= 126) filtered.Append(c);
+                else if (c == '\n' || c == '\t') filtered.Append(' ');
+            }
+            sb.DrawString(_smallFont, filtered.ToString(), new Vector2(logX, logY + i * 14), new Color(220, 180, 100));
+        }
+
+        int promptY = Game.GraphicsDevice.Viewport.Height / 2 - 30;
+        string raw = promptingOwner.Definition.Persona.GetOpponentChoicePrompt(
+            promptingOwner, respondingFighter, promptingOwner.PersonaState);
+        var filteredPrompt = new System.Text.StringBuilder();
+        foreach (char c in raw)
+        {
+            if (c >= 32 && c <= 126) filteredPrompt.Append(c);
+            else if (c == '\n' || c == '\t') filteredPrompt.Append(' ');
+        }
+        string safePrompt = filteredPrompt.ToString();
+
+        string header  = $"{fighterLabel}: Opponent's ability";
+        string keyHint = "[Y] Accept   [N] Decline";
+        float headerW = _font.MeasureString(header).X;
+        float promptW = _smallFont.MeasureString(safePrompt).X;
+        float keysW   = _smallFont.MeasureString(keyHint).X;
+        sb.DrawString(_font,      header,     new Vector2(cx - headerW / 2, promptY),      Color.Orchid);
+        sb.DrawString(_smallFont, safePrompt, new Vector2(cx - promptW / 2, promptY + 28), Color.White);
+        sb.DrawString(_smallFont, keyHint,    new Vector2(cx - keysW  / 2, promptY + 50),  Color.Yellow);
+    }
+
+    private void DrawPersonaHud(SpriteBatch sb)
+    {
+        var linesA = _match.FighterA.Definition.Persona.GetHudDisplayInfo(_match.FighterA.PersonaState);
+        var linesB = _match.FighterB.Definition.Persona.GetHudDisplayInfo(_match.FighterB.PersonaState);
+        if (linesA.Count == 0 && linesB.Count == 0) return;
+
+        int screenW = Game.GraphicsDevice.Viewport.Width;
+        int y = Game.GraphicsDevice.Viewport.Height - 66;
+        var allLines = linesA.Concat(linesB).ToList();
+        string text = string.Join("  |  ", allLines.Select(l =>
+        {
+            var sb2 = new System.Text.StringBuilder();
+            foreach (char c in l)
+            {
+                if (c >= 32 && c <= 126) sb2.Append(c);
+                else sb2.Append(' ');
+            }
+            return sb2.ToString();
+        }));
+        float tw = _smallFont.MeasureString(text).X;
+        sb.DrawString(_smallFont, text, new Vector2((screenW - tw) / 2f, y), new Color(255, 180, 220));
     }
 
     private void DrawStageChoicePrompt(SpriteBatch sb)

@@ -40,6 +40,13 @@ public class FighterInstance
     // --- Persona-specific runtime state ---
     public PersonaState PersonaState { get; set; } = null!;
 
+    // --- Round-scoped stat modifiers (set by persona/stage choice hooks, cleared at StartNewRound) ---
+    public int RoundPowerModifier { get; set; } = 0;
+    public int RoundSpeedModifier { get; set; } = 0;
+
+    // --- Active immunities for this round (populated by OnRoundResolutionStart, cleared at round start) ---
+    public HashSet<CombatImmunity> ActiveImmunities { get; } = new();
+
     public FighterInstance(FighterDefinition definition, string displayName = "")
     {
         Definition = definition;

@@ -35,4 +35,10 @@ public enum CardKeyword
 
     // Debug/Testing
     Kill,           // Instantly disables all opponent body parts (TEST ONLY)
+
+    // Curse persona interactions (The Cursed character)
+    CurseGain,      // On hit: gain 1 extra Curse token to owner's pool (on top of base mechanic)
+    CursePull,      // On hit: pull opponent N hexes toward self (N = opponent's curse token count)
+    CurseEmpower,   // This attack gains +N power (N = owner's curse pool count)
+    CurseWeaken,    // Reduce opponent's defense by N this attack (N = their curse token count)
 }

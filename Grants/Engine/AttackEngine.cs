@@ -84,7 +84,8 @@ public static class AttackEngine
 
         // --- Power vs Defense ---
         int attackerPower = attacker.GetCardPower(attackerPair.Generic ?? (CardBase)attackerPair.Special!)
-                          + attacker.GetCardPower(attackerPair.Unique ?? (CardBase)attackerPair.Special!);
+                          + attacker.GetCardPower(attackerPair.Unique ?? (CardBase)attackerPair.Special!)
+                          + attacker.RoundPowerModifier;
 
         int defenderDefense = defender.GetCardDefense(defenderPair.Generic ?? (CardBase)defenderPair.Special!)
                             + defender.GetCardDefense(defenderPair.Unique ?? (CardBase)defenderPair.Special!);
@@ -93,15 +94,21 @@ public static class AttackEngine
         // ArmorBreak: reduce defender defense by 1
         if (atkKeywords.ContainsKeyword(CardKeyword.ArmorBreak))
         {
-            defenderDefense = Math.Max(0, defenderDefense - 1);
-            result.TriggeredKeywords.Add(new CardKeywordValue(CardKeyword.ArmorBreak));
+            if (!defender.ActiveImmunities.Contains(CombatImmunity.DefenseReduction))
+            {
+                defenderDefense = Math.Max(0, defenderDefense - 1);
+                result.TriggeredKeywords.Add(new CardKeywordValue(CardKeyword.ArmorBreak));
+            }
         }
 
         // Piercing: ignore half defender defense
         if (atkKeywords.ContainsKeyword(CardKeyword.Piercing))
         {
-            defenderDefense = defenderDefense / 2;
-            result.TriggeredKeywords.Add(new CardKeywordValue(CardKeyword.Piercing));
+            if (!defender.ActiveImmunities.Contains(CombatImmunity.DefenseReduction))
+            {
+                defenderDefense = defenderDefense / 2;
+                result.TriggeredKeywords.Add(new CardKeywordValue(CardKeyword.Piercing));
+            }
         }
 
         // Guard keyword on defender: +2 defense
@@ -109,6 +116,31 @@ public static class AttackEngine
         {
             defenderDefense += 2;
             result.TriggeredKeywords.Add(new CardKeywordValue(CardKeyword.Guard));
+        }
+
+        // CurseEmpower: +N power (N = owner's curse pool)
+        if (atkKeywords.ContainsKeyword(CardKeyword.CurseEmpower))
+        {
+            int pool = attacker.PersonaState.Counters.GetValueOrDefault("cursed_pool", 0);
+            if (pool > 0)
+            {
+                attackerPower += pool;
+                result.TriggeredKeywords.Add(new CardKeywordValue(CardKeyword.CurseEmpower, pool));
+            }
+        }
+
+        // CurseWeaken: -N defense (N = defender's curse tokens)
+        if (atkKeywords.ContainsKeyword(CardKeyword.CurseWeaken))
+        {
+            if (!defender.ActiveImmunities.Contains(CombatImmunity.DefenseReduction))
+            {
+                int tokens = defender.PersonaState.Counters.GetValueOrDefault("curse_tokens", 0);
+                if (tokens > 0)
+                {
+                    defenderDefense = Math.Max(0, defenderDefense - tokens);
+                    result.TriggeredKeywords.Add(new CardKeywordValue(CardKeyword.CurseWeaken, tokens));
+                }
+            }
         }
 
         result.PowerFinal = attackerPower;
@@ -141,23 +173,41 @@ public static class AttackEngine
         // --- Apply keywords that modify target ---
         if (atkKeywords.ContainsKeyword(CardKeyword.Bleed))
         {
-            int bleedVal = atkKeywords.GetKeywordValue(CardKeyword.Bleed);
-            defender.LocationStates[result.TargetLocation].BleedStacks += bleedVal;
-            result.TriggeredKeywords.Add(new CardKeywordValue(CardKeyword.Bleed, bleedVal));
-            round.Log.Add($"  {defender.DisplayName}'s {result.TargetLocation} is now bleeding!");
+            if (!defender.ActiveImmunities.Contains(CombatImmunity.Bleed))
+            {
+                int bleedVal = atkKeywords.GetKeywordValue(CardKeyword.Bleed);
+                defender.LocationStates[result.TargetLocation].BleedStacks += bleedVal;
+                result.TriggeredKeywords.Add(new CardKeywordValue(CardKeyword.Bleed, bleedVal));
+                round.Log.Add($"  {defender.DisplayName}'s {result.TargetLocation} is now bleeding!");
+            }
         }
 
         if (atkKeywords.ContainsKeyword(CardKeyword.Stagger))
         {
-            defender.StaggerTurnsRemaining = 1;
-            result.TriggeredKeywords.Add(new CardKeywordValue(CardKeyword.Stagger));
-            round.Log.Add($"  {defender.DisplayName} is staggered -- cooldowns +1 next turn.");
+            if (!defender.ActiveImmunities.Contains(CombatImmunity.Stagger))
+            {
+                defender.StaggerTurnsRemaining = 1;
+                result.TriggeredKeywords.Add(new CardKeywordValue(CardKeyword.Stagger));
+                round.Log.Add($"  {defender.DisplayName} is staggered -- cooldowns +1 next turn.");
+            }
         }
 
         if (atkKeywords.ContainsKeyword(CardKeyword.Knockback))
         {
-            result.TriggeredKeywords.Add(new CardKeywordValue(CardKeyword.Knockback));
+            if (!defender.ActiveImmunities.Contains(CombatImmunity.Push))
+                result.TriggeredKeywords.Add(new CardKeywordValue(CardKeyword.Knockback));
             // Spatial movement is applied by ResolutionEngine after Resolve() returns
+        }
+
+        // CurseGain: extra pool token on hit (handled by OnLandedHit via triggered keyword)
+        if (atkKeywords.ContainsKeyword(CardKeyword.CurseGain))
+            result.TriggeredKeywords.Add(new CardKeywordValue(CardKeyword.CurseGain));
+
+        // CursePull: pull opponent by their curse token count (movement handled by ResolutionEngine)
+        if (atkKeywords.ContainsKeyword(CardKeyword.CursePull))
+        {
+            if (!defender.ActiveImmunities.Contains(CombatImmunity.Pull))
+                result.TriggeredKeywords.Add(new CardKeywordValue(CardKeyword.CursePull));
         }
 
         // Kill keyword: instantly disable all body parts (TEST ONLY)

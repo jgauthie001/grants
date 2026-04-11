@@ -42,8 +42,8 @@ public static class ResolutionEngine
             RoundNumber = match.CurrentRound,
             PairA = pairA,
             PairB = pairB,
-            SpeedA = speedA,
-            SpeedB = speedB,
+            SpeedA = speedA + fa.RoundSpeedModifier,
+            SpeedB = speedB + fb.RoundSpeedModifier,
         };
 
         var posA = new HexCoord(fa.HexQ, fa.HexR);
@@ -54,6 +54,10 @@ public static class ResolutionEngine
         round.Log.Add($"Speed: {fa.DisplayName}={speedA}, {fb.DisplayName}={speedB}.");
 
         match.CurrentRoundState = round;
+
+        // --- Clear round-scoped state before hooks populate it ---
+        fa.ActiveImmunities.Clear();
+        fb.ActiveImmunities.Clear();
 
         // --- Stage + Persona hooks: round start ---
         match.Stage.OnRoundStart(match, match.StageState);
@@ -71,6 +75,12 @@ public static class ResolutionEngine
             round.Log.Add($"{fa.DisplayName} moves to {newPosA} (dist={distA}).");
             var resultA1 = AttackEngine.Resolve(fa, pairA, fb, pairB, distA, round);
             ApplyKnockback(resultA1, fa, fb, match.Board, round);
+            ApplyPull(resultA1, fa, fb, match.Board, round);
+            if (resultA1.Landed)
+            {
+                fa.Definition.Persona.OnLandedHit(fa, fb, pairA, resultA1, round, match, fa.PersonaState);
+                fb.Definition.Persona.OnLandedHit(fa, fb, pairA, resultA1, round, match, fb.PersonaState);
+            }
             round.FirstHalfLogCount = round.Log.Count;
 
             // Pause before second fighter
@@ -87,6 +97,12 @@ public static class ResolutionEngine
             round.Log.Add($"{fb.DisplayName} moves to {newPosB} (dist={distB}).");
             var resultB1 = AttackEngine.Resolve(fb, pairB, fa, pairA, distB, round);
             ApplyKnockback(resultB1, fb, fa, match.Board, round);
+            ApplyPull(resultB1, fb, fa, match.Board, round);
+            if (resultB1.Landed)
+            {
+                fb.Definition.Persona.OnLandedHit(fb, fa, pairB, resultB1, round, match, fb.PersonaState);
+                fa.Definition.Persona.OnLandedHit(fb, fa, pairB, resultB1, round, match, fa.PersonaState);
+            }
             round.FirstHalfLogCount = round.Log.Count;
 
             // Pause before second fighter
@@ -104,8 +120,20 @@ public static class ResolutionEngine
 
             var resultA = AttackEngine.Resolve(fa, pairA, fb, pairB, dist, round);
             ApplyKnockback(resultA, fa, fb, match.Board, round);
+            ApplyPull(resultA, fa, fb, match.Board, round);
+            if (resultA.Landed)
+            {
+                fa.Definition.Persona.OnLandedHit(fa, fb, pairA, resultA, round, match, fa.PersonaState);
+                fb.Definition.Persona.OnLandedHit(fa, fb, pairA, resultA, round, match, fb.PersonaState);
+            }
             var resultB = AttackEngine.Resolve(fb, pairB, fa, pairA, dist, round);
             ApplyKnockback(resultB, fb, fa, match.Board, round);
+            ApplyPull(resultB, fb, fa, match.Board, round);
+            if (resultB.Landed)
+            {
+                fb.Definition.Persona.OnLandedHit(fb, fa, pairB, resultB, round, match, fb.PersonaState);
+                fa.Definition.Persona.OnLandedHit(fb, fa, pairB, resultB, round, match, fa.PersonaState);
+            }
 
             round.FighterAMissed = !resultA.InRange;
             round.FighterBMissed = !resultB.InRange;
@@ -154,6 +182,12 @@ public static class ResolutionEngine
                 round.Log.Add($"{fb.DisplayName} moves to {newPosB} (dist={distB}).");
                 var resultB2 = AttackEngine.Resolve(fb, pairB, fa, pairA, distB, round);
                 ApplyKnockback(resultB2, fb, fa, match.Board, round);
+                ApplyPull(resultB2, fb, fa, match.Board, round);
+                if (resultB2.Landed)
+                {
+                    fb.Definition.Persona.OnLandedHit(fb, fa, pairB, resultB2, round, match, fb.PersonaState);
+                    fa.Definition.Persona.OnLandedHit(fb, fa, pairB, resultB2, round, match, fa.PersonaState);
+                }
             }
             else
             {
@@ -180,6 +214,12 @@ public static class ResolutionEngine
                 round.Log.Add($"{fa.DisplayName} moves to {newPosA} (dist={distA}).");
                 var resultA2 = AttackEngine.Resolve(fa, pairA, fb, pairB, distA, round);
                 ApplyKnockback(resultA2, fa, fb, match.Board, round);
+                ApplyPull(resultA2, fa, fb, match.Board, round);
+                if (resultA2.Landed)
+                {
+                    fa.Definition.Persona.OnLandedHit(fa, fb, pairA, resultA2, round, match, fa.PersonaState);
+                    fb.Definition.Persona.OnLandedHit(fa, fb, pairA, resultA2, round, match, fb.PersonaState);
+                }
             }
             else
             {
@@ -289,7 +329,44 @@ public static class ResolutionEngine
     }
 
     /// <summary>
-    /// If the attack result has Knockback triggered, move the defender 1 hex directly
+    /// If the attack result has CursePull triggered, pull the defender toward the attacker
+    /// by the defender's curse token count, stopping when adjacent.
+    /// </summary>
+    private static void ApplyPull(
+        AttackEngine.AttackResult result,
+        FighterInstance attacker,
+        FighterInstance defender,
+        HexBoard board,
+        RoundState round)
+    {
+        if (!result.Landed || !result.TriggeredKeywords.ContainsKeyword(CardKeyword.CursePull)) return;
+
+        int steps = defender.PersonaState.Counters.GetValueOrDefault("curse_tokens", 0);
+        if (steps == 0) return;
+
+        var defPos = new HexCoord(defender.HexQ, defender.HexR);
+        var atkPos = new HexCoord(attacker.HexQ, attacker.HexR);
+
+        for (int i = 0; i < steps; i++)
+        {
+            if (defPos.DistanceTo(atkPos) <= 1) break; // Already adjacent
+            var closest = defPos.GetNeighbors()
+                .Where(h => board.IsValid(h) && !board.IsOccupied(h))
+                .OrderBy(h => h.DistanceTo(atkPos))
+                .FirstOrDefault();
+            if (closest == default) break;
+            defPos = closest;
+        }
+
+        if (defPos.Q != defender.HexQ || defPos.R != defender.HexR)
+        {
+            defender.HexQ = defPos.Q;
+            defender.HexR = defPos.R;
+            round.Log.Add($"  {defender.DisplayName} is pulled toward {attacker.DisplayName}! (Now at {defPos})");
+        }
+    }
+
+    /// <summary>
     /// away from the attacker. No-op if the destination is out-of-bounds or occupied.
     /// </summary>
     private static void ApplyKnockback(

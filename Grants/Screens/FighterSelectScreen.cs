@@ -1,6 +1,7 @@
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Input;
+using Grants.Fighters.Cursed;
 using Grants.Fighters.Grants;
 using Grants.Models.Fighter;
 
@@ -38,7 +39,7 @@ public class FighterSelectScreen : GameScreen
         _fighters = new List<FighterDefinition>
         {
             GrantsFighter.CreateDefinition(),
-            // Add more fighters here as they are created
+            CursedFighter.CreateDefinition(),
         };
     }
 

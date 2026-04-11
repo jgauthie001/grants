@@ -1,6 +1,7 @@
+using Grants.Engine;
+using Grants.Models.Board;
 using Grants.Models.Cards;
 using Grants.Models.Match;
-using Grants.Models.Board;
 
 namespace Grants.Models.Fighter;
 
@@ -85,6 +86,58 @@ public abstract class FighterPersona
     {
         // Default: no post-round logic
     }
+
+    /// <summary>
+    /// Called immediately after a hit lands (attacker hurt defender).
+    /// Called once for the attacker's persona and once for the defender's persona.
+    /// Use to gain/transfer tokens, mark flags, react to being hit.
+    /// </summary>
+    public virtual void OnLandedHit(
+        FighterInstance attacker,
+        FighterInstance defender,
+        CardPair attackerPair,
+        AttackEngine.AttackResult result,
+        RoundState round,
+        MatchState match,
+        PersonaState state) { }
+
+    /// <summary>
+    /// Return true if this persona wants to offer the OPPONENT a choice at round start
+    /// (before card selection). Called for both fighters' personas each round.
+    /// </summary>
+    public virtual bool RequiresOpponentRoundStartChoice(
+        FighterInstance owner,
+        FighterInstance opponent,
+        MatchState match,
+        PersonaState state) => false;
+
+    /// <summary>
+    /// One-line prompt shown to the human opponent when a choice is required.
+    /// </summary>
+    public virtual string GetOpponentChoicePrompt(
+        FighterInstance owner,
+        FighterInstance opponent,
+        PersonaState state) => "";
+
+    /// <summary>
+    /// AI decision when the opponent must choose. Return true to accept, false to decline.
+    /// </summary>
+    public virtual bool ResolveAiOpponentChoice(
+        FighterInstance owner,
+        FighterInstance opponent,
+        MatchState match,
+        PersonaState state) => false;
+
+    /// <summary>
+    /// Called once the opponent (human or AI) has made their choice.
+    /// Use to apply stat modifiers (e.g. RoundPowerModifier) or set flags.
+    /// </summary>
+    public virtual void OnOpponentChoice(
+        FighterInstance owner,
+        FighterInstance opponent,
+        bool accepted,
+        MatchState match,
+        PersonaState state) { }
 
     /// <summary>
     /// Called each turn to decrement or update persona-specific cooldowns/effects.

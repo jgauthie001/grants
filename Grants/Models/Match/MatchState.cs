@@ -16,6 +16,8 @@ public enum MatchPhase
     RoundResult,        // Displaying round outcome before next round
     StageChoiceA,       // Stage-specific choice prompt for Fighter A
     StageChoiceB,       // Stage-specific choice prompt for Fighter B
+    PersonaChoiceA,     // Fighter A is offered a choice by Fighter B's persona
+    PersonaChoiceB,     // Fighter B is offered a choice by Fighter A's persona
     MatchOver,          // One fighter KO'd
 }
 
