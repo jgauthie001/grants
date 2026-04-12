@@ -32,6 +32,24 @@ public static class ResolutionEngine
         var fa = match.FighterA;
         var fb = match.FighterB;
 
+        // --- Clear round-scoped state and fire pre-round hooks BEFORE computing speed ---
+        // Persona hooks like HonourDebtPersona modify RoundSpeedModifier here,
+        // so they must run before SpeedA/SpeedB are baked into RoundState.
+        fa.ActiveImmunities.Clear();
+        fb.ActiveImmunities.Clear();
+
+        // Temporary round stub so hooks have a log to write to
+        var preRound = new RoundState
+        {
+            RoundNumber = match.CurrentRound,
+            PairA = pairA,
+            PairB = pairB,
+            SpeedA = 0, SpeedB = 0, // placeholder — replaced below
+        };
+        match.Stage.OnRoundStart(match, match.StageState);
+        fa.Definition.Persona.OnRoundResolutionStart(preRound, match, fa, fb, fa.PersonaState);
+        fb.Definition.Persona.OnRoundResolutionStart(preRound, match, fb, fa, fb.PersonaState);
+
         int speedA = fa.GetCardSpeed(pairA.Generic ?? (CardBase)pairA.Special!) +
                      fa.GetCardSpeed(pairA.Unique ?? (CardBase)pairA.Special!);
         int speedB = fb.GetCardSpeed(pairB.Generic ?? (CardBase)pairB.Special!) +
@@ -46,6 +64,9 @@ public static class ResolutionEngine
             SpeedB = speedB + fb.RoundSpeedModifier,
         };
 
+        // Carry over any log lines written by the pre-round hooks
+        round.Log.AddRange(preRound.Log);
+
         var posA = new HexCoord(fa.HexQ, fa.HexR);
         var posB = new HexCoord(fb.HexQ, fb.HexR);
         var chosenMoveA = match.ChosenMoveA;
@@ -54,15 +75,6 @@ public static class ResolutionEngine
         round.Log.Add($"Speed: {fa.DisplayName}={speedA}, {fb.DisplayName}={speedB}.");
 
         match.CurrentRoundState = round;
-
-        // --- Clear round-scoped state before hooks populate it ---
-        fa.ActiveImmunities.Clear();
-        fb.ActiveImmunities.Clear();
-
-        // --- Stage + Persona hooks: round start ---
-        match.Stage.OnRoundStart(match, match.StageState);
-        fa.Definition.Persona.OnRoundResolutionStart(round, match, fa, fb, fa.PersonaState);
-        fb.Definition.Persona.OnRoundResolutionStart(round, match, fb, fa, fb.PersonaState);
 
         if (round.FighterAFaster)
         {

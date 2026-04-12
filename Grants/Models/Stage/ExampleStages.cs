@@ -417,7 +417,7 @@ public class EntryWayStage : StageModifier
             return; // Already disabled — can't get worse
 
         locState.ApplyDamage(1);
-        round.Log.Add($"Stage [{EntryWayStage.Instance.Name}]: {fighter.DisplayName} stood still — {target} takes 1 damage! ({locState.State})");
+        round.Log.Add($"Stage [{EntryWayStage.Instance.Name}]: {fighter.DisplayName} stood still - {target} takes 1 damage! ({locState.State})");
     }
 
     private static BodyLocation BetterLeg(FighterInstance fighter)
@@ -452,7 +452,7 @@ public class ExhibitionStage : StageModifier
     {
         StageId = "exhibition",
         Name = "The Exhibition",
-        Description = "Claim territory with tokens — but tokens near you deal damage each round, and placing one costs you offensive power.",
+        Description = "Claim territory with tokens - tokens near you deal damage each round, and placing one costs you offensive power.",
     };
 
     private ExhibitionStage() { }
@@ -650,6 +650,6 @@ public class ExhibitionStage : StageModifier
         if (locState.State == DamageState.Healthy) return; // Nothing to undo
 
         locState.ReduceDamage(2);
-        round.Log.Add($"[The Exhibition] {attacker.DisplayName} placed a token — damage to {defender.DisplayName}'s {hitLocation.Value} reduced by 2. ({locState.State})");
+        round.Log.Add($"[The Exhibition] {attacker.DisplayName} placed a token - damage to {defender.DisplayName}'s {hitLocation.Value} reduced by 2. ({locState.State})");
     }
 }

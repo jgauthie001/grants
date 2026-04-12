@@ -35,7 +35,7 @@ public class CatalystPersona : FighterPersona
     {
         PersonaId = "catalyst",
         Name     = "The Catalyst",
-        Description = "Curse tokens empower whoever spends them — but The Catalyst spends harder.",
+        Description = "Curse tokens empower whoever spends them - but The Catalyst spends harder.",
     };
 
     private CatalystPersona() { }

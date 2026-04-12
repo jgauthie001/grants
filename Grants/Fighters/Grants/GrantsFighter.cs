@@ -121,7 +121,7 @@ public static class GrantsFighter
     {
         Id = "grants_g_core",
         Name = "Center Drive_pl",
-        Description = "Driving from the hips — powers grapples and slams._pl",
+        Description = "Driving from the hips - powers grapples and slams._pl",
         BodyPart = BodyPart.Core,
         SatisfiesTags = new() { "core", "body", "upper", "lower" },
         BasePower = 2,

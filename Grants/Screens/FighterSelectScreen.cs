@@ -44,6 +44,7 @@ public class FighterSelectScreen : GameScreen
             CursedFighter.CreateDefinition(),
             CatalystFighter.CreateDefinition(),
             ChivalrousFighter.CreateDefinition(),
+            HonourDebtFighter.CreateDefinition(),
         };
     }
 

@@ -258,7 +258,7 @@ public static class ChivalrousFighter
     {
         Id          = FighterId,
         Name        = "The Chivalrous",
-        Description = "A knight who honours opponents with tokens — then punishes them for it.",
+        Description = "A knight who honours opponents with tokens - then punishes them for it.",
         Persona     = ChivalrousPersona.Instance,
         RankedUnlockWins = 10,
         GenericCards = new()

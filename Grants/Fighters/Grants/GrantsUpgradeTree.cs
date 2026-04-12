@@ -77,7 +77,7 @@ public static class GrantsUpgradeTree
         Add(nodes, new UpgradeNode
         {
             Id = "g_off_6", Name = "Shattering Blow_pl",
-            Description = "Overhand now has the Crushing keyword — advances damage state further._pl",
+            Description = "Overhand now has the Crushing keyword - advances damage state further._pl",
             NodeType = UpgradeNodeType.CardSlot, Cost = 2, PowerRatingValue = 2, Branch = "Offense",
             Prerequisites = new() { "g_off_5" },
             TargetCardId = GrantsFighter.U_Overhand.Id, SlotIndex = 1,
@@ -161,7 +161,7 @@ public static class GrantsUpgradeTree
         Add(nodes, new UpgradeNode
         {
             Id = "g_tgh_4", Name = "Hard Head_pl",
-            Description = "Head card cooldown reduced to 0 — can use it back to back._pl",
+            Description = "Head card cooldown reduced to 0 - can use it back to back._pl",
             NodeType = UpgradeNodeType.CardSlot, Cost = 2, PowerRatingValue = 2, Branch = "Toughness",
             Prerequisites = new() { "g_tgh_3" },
             TargetCardId = GrantsFighter.G_Head.Id, SlotIndex = 1,
@@ -195,7 +195,7 @@ public static class GrantsUpgradeTree
         Add(nodes, new UpgradeNode
         {
             Id = "g_tgh_item1", Name = "Knee Brace_pl",
-            Description = "Passive: left leg cannot be Disabled — maximum damage state is Injured._pl",
+            Description = "Passive: left leg cannot be Disabled - maximum damage state is Injured._pl",
             NodeType = UpgradeNodeType.Item, Cost = 2, PowerRatingValue = 2, Branch = "Toughness",
             Prerequisites = new() { "g_tgh_4" },
             ItemId = "grants_item_knee_brace",
@@ -427,7 +427,7 @@ public static class GrantsUpgradeTree
         Add(nodes, new UpgradeNode
         {
             Id = "g_fin_8", Name = "Counter Launch_pl",
-            Description = "Sidestep gains the Press keyword — after a successful dodge, advance 1 hex._pl",
+            Description = "Sidestep gains the Press keyword - after a successful dodge, advance 1 hex._pl",
             NodeType = UpgradeNodeType.CardSlot, Cost = 2, PowerRatingValue = 2, Branch = "Finisher",
             Prerequisites = new() { "g_fin_7" },
             TargetCardId = GrantsFighter.U_SideStep.Id, SlotIndex = 1,
@@ -443,7 +443,7 @@ public static class GrantsUpgradeTree
         Add(nodes, new UpgradeNode
         {
             Id = "g_final_ironclad", Name = "Ironclad_pl",
-            Description = "Your Torso location can never be Disabled — damage caps at Injured._pl",
+            Description = "Your Torso location can never be Disabled - damage caps at Injured._pl",
             NodeType = UpgradeNodeType.FinalNode, Cost = 3, PowerRatingValue = 3, Branch = "Final",
             Prerequisites = new() { "g_tgh_8", "g_off_8" },
             FinalEffect = new()
@@ -474,7 +474,7 @@ public static class GrantsUpgradeTree
             Prerequisites = new() { "g_off_8", "g_fin_item1" },
             FinalEffect = new()
             {
-                FlavorDescription = "A hit lands — and something else breaks too._pl",
+                FlavorDescription = "A hit lands - and something else breaks too._pl",
                 SplashDamageOnSimultaneousPowerWin = true,
             },
         });

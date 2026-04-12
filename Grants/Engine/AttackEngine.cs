@@ -218,7 +218,7 @@ public static class AttackEngine
                 result.TriggeredKeywords.Add(new CardKeywordValue(CardKeyword.MaxDamageCap, cap));
                 string capName = cap == 1 ? "Bruised" : cap == 2 ? "Injured" : $"level {cap}";
                 if (maxSteps == 0)
-                    round.Log.Add($"  {defender.DisplayName}'s damage cap absorbs the hit — location already at or past {capName}!");
+                    round.Log.Add($"  {defender.DisplayName}'s damage cap absorbs the hit - location already at or past {capName}!");
                 else
                     round.Log.Add($"  {defender.DisplayName}'s damage cap: limited to {maxSteps} step(s) (max: {capName}).");
             }

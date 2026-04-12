@@ -1133,7 +1133,7 @@ public class FightScreen : GameScreen
         // Unique cards — color by cooldown
         sb.DrawString(_smallFont, "Moves:", new Vector2(x, y), Color.DimGray);
         y += 16;
-        foreach (var card in opp.Definition.UniqueCards)
+        foreach (var card in opp.GetAllUniques())
         {
             int cd = opp.GetCooldown(card.Id);
             Color c = cd > 0 ? new Color(100, 100, 100) : Color.LightGray;
@@ -1303,12 +1303,36 @@ public class FightScreen : GameScreen
                 string mvStrG = card.MaxMovement == 0 ? "-" :
                     card.MinMovement == card.MaxMovement ? $"{mvTypeG}{card.MaxMovement}" :
                     $"{mvTypeG}{card.MinMovement}-{card.MaxMovement}";
-                string label = $"{(sel ? ">" : " ")} {card.Name}  [Spd:{card.BaseSpeed:+#;-#;0} Pwr:{card.BasePower} Def:{card.BaseDefense} Mv:{mvStrG}]" + GetKeywordDisplay(card);
+                int comboCount = _match.FighterA.GetAvailableUniques().Count(u => _match.FighterA.CanPair(card, u));
+                string comboTag = $" ({comboCount})";
+                string label = $"{(sel ? ">" : " ")} {card.Name}  [Spd:{card.BaseSpeed:+#;-#;0} Pwr:{card.BasePower} Def:{card.BaseDefense} Mv:{mvStrG}]{comboTag}" + GetKeywordDisplay(card);
                 sb.DrawString(_smallFont, label, new Vector2(panelX, panelY + 24 + i * 18), c);
             }
 
-            sb.DrawString(_smallFont, "[Up/Down] Navigate   [Enter] Select",
-                new Vector2(panelX, panelY + 24 + _validGenerics.Count * 18 + 8), Color.DimGray);
+            // Preview compatible uniques for the highlighted generic
+            if (_validGenerics.Count > 0)
+            {
+                var previewGeneric = _validGenerics[_genericSelectionIndex];
+                var previewAvail = _match.FighterA.GetAvailableUniques()
+                    .Where(u => _match.FighterA.CanPair(previewGeneric, u)).ToList();
+                var previewCd = _match.FighterA.GetAllUniques()
+                    .Where(u => _match.FighterA.CanPair(previewGeneric, u) && _match.FighterA.GetCooldown(u.Id) > 0).ToList();
+                var previewIncompat = _match.FighterA.GetAllUniques()
+                    .Where(u => !_match.FighterA.CanPair(previewGeneric, u)).ToList();
+
+                int previewY = panelY + 24 + _validGenerics.Count * 18 + 10;
+                sb.DrawString(_smallFont, $"Combos with {previewGeneric.Name}:", new Vector2(panelX, previewY), Color.DimGray);
+                previewY += 14;
+                foreach (var u in previewAvail)
+                { sb.DrawString(_smallFont, $"  + {u.Name}", new Vector2(panelX, previewY), new Color(100, 200, 120)); previewY += 14; }
+                foreach (var u in previewCd)
+                { sb.DrawString(_smallFont, $"  ~ {u.Name} [CD:{_match.FighterA.GetCooldown(u.Id)}]", new Vector2(panelX, previewY), new Color(130, 130, 130)); previewY += 14; }
+                foreach (var u in previewIncompat)
+                { sb.DrawString(_smallFont, $"  x {u.Name}", new Vector2(panelX, previewY), new Color(80, 80, 80)); previewY += 14; }
+
+                sb.DrawString(_smallFont, "[Up/Down] Navigate   [Enter] Select",
+                    new Vector2(panelX, previewY + 6), Color.DimGray);
+            }
 
             // Show disabled/on-cooldown generics so player can see what they've lost
             var disabledGenerics = _match.FighterA.Definition.GenericCards
@@ -1404,20 +1428,27 @@ public class FightScreen : GameScreen
             sb.DrawString(_smallFont, "[Up/Down] Navigate   [Enter] Commit   [Backspace] Back",
                 new Vector2(panelX, panelY + 24 + _validUniques.Count * 18 + 8), Color.DimGray);
 
-            // Show on-cooldown uniques so player sees what isn't available
-            var unavailableUniques = _match.FighterA.Definition.UniqueCards
+            // Show on-cooldown uniques and incompatible uniques
+            var unavailableUniques = _match.FighterA.GetAllUniques()
                 .Where(u => !_validUniques.Contains(u) && _match.FighterA.GetCooldown(u.Id) > 0)
                 .ToList();
-            if (unavailableUniques.Count > 0)
+            var incompatibleUniques = _match.FighterA.GetAllUniques()
+                .Where(u => !_match.FighterA.CanPair(_selectedGeneric!, u))
+                .ToList();
+            int trailingY = panelY + 24 + _validUniques.Count * 18 + 30;
+            foreach (var u in unavailableUniques)
             {
-                int offsetY = panelY + 24 + _validUniques.Count * 18 + 30;
-                foreach (var u in unavailableUniques)
-                {
-                    int cd = _match.FighterA.GetCooldown(u.Id);
-                    sb.DrawString(_smallFont, $"  {u.Name} [CD:{cd}]",
-                        new Vector2(panelX, offsetY), new Color(100, 100, 100));
-                    offsetY += 16;
-                }
+                int cd = _match.FighterA.GetCooldown(u.Id);
+                sb.DrawString(_smallFont, $"  ~ {u.Name} [CD:{cd}]",
+                    new Vector2(panelX, trailingY), new Color(130, 130, 130));
+                trailingY += 16;
+            }
+            foreach (var u in incompatibleUniques)
+            {
+                string tags = u.RequiredBodyTags.Count > 0 ? string.Join("/", u.RequiredBodyTags) : "any";
+                sb.DrawString(_smallFont, $"  x {u.Name} [needs: {tags}]",
+                    new Vector2(panelX, trailingY), new Color(80, 80, 80));
+                trailingY += 16;
             }
         }
     }

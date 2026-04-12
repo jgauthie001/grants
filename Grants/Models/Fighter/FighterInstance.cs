@@ -70,13 +70,13 @@ public class FighterInstance
         return available;
     }
 
+    /// <summary>Returns all unique cards for this fighter, including universal ones.</summary>
+    public List<UniqueCard> GetAllUniques() =>
+        Definition.UniqueCards.Concat(UniversalCards.All).ToList();
+
     /// <summary>Returns available unique cards this turn (not on cooldown).</summary>
-    public List<UniqueCard> GetAvailableUniques()
-    {
-        return Definition.UniqueCards
-            .Where(c => GetCooldown(c.Id) <= 0)
-            .ToList();
-    }
+    public List<UniqueCard> GetAvailableUniques() =>
+        GetAllUniques().Where(c => GetCooldown(c.Id) <= 0).ToList();
 
     /// <summary>Returns available special cards this turn (not on cooldown).</summary>
     public List<SpecialCard> GetAvailableSpecials()
