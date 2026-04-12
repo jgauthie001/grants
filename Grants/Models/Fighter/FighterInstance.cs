@@ -14,7 +14,6 @@ public class FighterInstance
     // --- Position on hex board ---
     public int HexQ { get; set; }
     public int HexR { get; set; }
-    public int HexFacing { get; set; } = 0; // 0-5, clockwise from top
 
     // --- Damage state per location ---
     public Dictionary<BodyLocation, LocationState> LocationStates { get; private set; } = new();
@@ -22,8 +21,7 @@ public class FighterInstance
     // --- Card cooldown tracking (CardId → turns remaining) ---
     public Dictionary<string, int> Cooldowns { get; private set; } = new();
 
-    // --- Bleed/status from keywords ---
-    public int BleedStacks { get; set; } = 0;  // Global bleed (applies to next hit location)
+    // --- Status from keywords ---
     public int StaggerTurnsRemaining { get; set; } = 0; // Cooldowns +1 when > 0
 
     // --- Applied upgrade modifiers (from FighterProgress) ---
@@ -31,6 +29,7 @@ public class FighterInstance
     public Dictionary<string, int> UpgradedCardDefense { get; set; } = new();
     public Dictionary<string, int> UpgradedCardSpeed { get; set; } = new();
     public Dictionary<string, int> UpgradedCardMovement { get; set; } = new();
+    public Dictionary<string, int> UpgradedCardMaxRange { get; set; } = new();
     public Dictionary<string, int> UpgradedCardCooldownReduction { get; set; } = new();
     public Dictionary<string, List<CardKeywordValue>> UpgradedCardKeywords { get; set; } = new();
 

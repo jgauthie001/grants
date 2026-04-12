@@ -28,6 +28,7 @@ public class PostMatchScreen : GameScreen
     {
         _font = Game.DefaultFont;
         _smallFont = Game.SmallFont;
+        _prevKeys = Keyboard.GetState();
 
         (_match, _playerWon) = ((MatchState, bool))data!;
         _fighterId = _match.FighterA.Definition.Id;

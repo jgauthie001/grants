@@ -27,6 +27,7 @@ public enum CardKeyword
     Guard,          // +2 defense this turn, cannot be used to attack
     Parry,          // If opponent attacks the same body part: counter triggers at +1 power
     Deflect,        // On being hit: redirect half damage to a random other location
+    MaxDamageCap,   // On being hit: incoming damage cannot advance this location past the cap state (value: 1=Bruised, 2=Injured)
 
     // Positional
     Sidestep,       // Allows diagonal movement regardless of standard move rules
@@ -41,4 +42,9 @@ public enum CardKeyword
     CursePull,      // On hit: pull opponent N hexes toward self (N = opponent's curse token count)
     CurseEmpower,   // This attack gains +N power (N = owner's curse pool count)
     CurseWeaken,    // Reduce opponent's defense by N this attack (N = their curse token count)
+
+    // Chivalrous persona interactions
+    Pull,           // On hit: pull opponent 1 hex toward attacker
+    ChivalryBonus,  // On hit: +N extra damage steps if defender holds >=1 chivalry token (N = value)
+    DistanceGuard,  // When defending: if current distance >= value, gain +2 defense
 }

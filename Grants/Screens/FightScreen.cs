@@ -47,6 +47,12 @@ public class FightScreen : GameScreen
 
     // Round log for display
     private List<string> _roundLog = new();
+    // Step-wise resolution display
+    private List<List<string>> _resolutionSteps = new();
+    private int _stepIndex = 0;
+    private bool _resolutionFullyDisplayed = false;
+    private bool _needsSecondHalf = false;
+    private int _firstHalfLogCount = 0;
     // Pre-round effect log (stage effects applied before card selection)
     private List<string> _preRoundLog = new();
     // Resign confirmation state
@@ -69,11 +75,15 @@ public class FightScreen : GameScreen
     private const float BoardOriginX = 640f;
     private const float BoardOriginY = 360f;
 
+    // Stored so [R] Replay can restart the same match
+    private object? _replayData;
+
     public override void OnEnter(object? data = null)
     {
         _font = Game.DefaultFont;
         _smallFont = Game.SmallFont;
         _pixel = Game.Pixel;
+        _prevKeys = Keyboard.GetState();
 
         FighterDefinition fighterDefA;
         FighterDefinition fighterDefB;
@@ -139,6 +149,7 @@ public class FightScreen : GameScreen
         };
 
         _match.StageState = _match.Stage.CreateRuntimeState();
+        _replayData = data;
 
         // Starting positions
         _match.FighterA.HexQ = Models.Board.HexBoard.FighterAStart.Q;
@@ -329,7 +340,7 @@ public class FightScreen : GameScreen
                 {
                     _match.ChosenMoveA = _moveSelectionIndex == 0 ? null : _validMoveHexes[_moveSelectionIndex - 1];
                     _awaitingMovement = false;
-                    ExecuteRound();
+                    ShowCardReveal();
                 }
 
                 if (IsPressed(keys, _prevKeys, Keys.Escape))
@@ -339,7 +350,7 @@ public class FightScreen : GameScreen
                         ? _validMoveHexes[0]
                         : null;
                     _awaitingMovement = false;
-                    ExecuteRound();
+                    ShowCardReveal();
                 }
 
                 // Click on a valid hex to move there
@@ -352,21 +363,24 @@ public class FightScreen : GameScreen
                         {
                             _match.ChosenMoveA = _validMoveHexes[i];
                             _awaitingMovement = false;
-                            ExecuteRound();
+                            ShowCardReveal();
                             break;
                         }
                     }
                 }
             }
-            else if (_match.Phase == MatchPhase.RoundMidpoint)
+            else if (_match.Phase == MatchPhase.CardReveal)
             {
                 if (IsPressed(keys, _prevKeys, Keys.Enter) || IsPressed(keys, _prevKeys, Keys.Space))
-                {
-                    ResolutionEngine.ResolveSecondHalf(_match);
-                    _roundLog = _match.CurrentRoundState!.Log.ToList();
-                }
+                    ExecuteRound();
             }
-            else if (_match.Phase == MatchPhase.RoundResult)
+            else if (_match.Phase == MatchPhase.RoundMidpoint ||
+                     (_match.Phase == MatchPhase.RoundResult && !_resolutionFullyDisplayed))
+            {
+                if (IsPressed(keys, _prevKeys, Keys.Enter) || IsPressed(keys, _prevKeys, Keys.Space))
+                    AdvanceResolutionStep();
+            }
+            else if (_match.Phase == MatchPhase.RoundResult && _resolutionFullyDisplayed)
             {
                 if (IsPressed(keys, _prevKeys, Keys.Enter) || IsPressed(keys, _prevKeys, Keys.Space))
                     StartNewRound();
@@ -404,40 +418,13 @@ public class FightScreen : GameScreen
                     _match.FighterB.Definition.Persona.OnOpponentChoice(
                         _match.FighterB, _match.FighterA, true, _match, _match.FighterB.PersonaState);
                     _preRoundLog.Add("You spend a Curse token (-1 Power / -1 Speed this round).");
-                    // FighterA's persona may also need to prompt FighterB
-                    if (_match.FighterA.Definition.Persona.RequiresOpponentRoundStartChoice(
-                            _match.FighterA, _match.FighterB, _match, _match.FighterA.PersonaState))
-                    {
-                        if (_match.FighterBIsHuman) { _match.Phase = MatchPhase.PersonaChoiceB; }
-                        else
-                        {
-                            bool aiB = _match.FighterA.Definition.Persona.ResolveAiOpponentChoice(
-                                _match.FighterA, _match.FighterB, _match, _match.FighterA.PersonaState);
-                            _match.FighterA.Definition.Persona.OnOpponentChoice(
-                                _match.FighterA, _match.FighterB, aiB, _match, _match.FighterA.PersonaState);
-                            EnterCardSelection();
-                        }
-                    }
-                    else EnterCardSelection();
+                    AdvanceAfterFighterBPersonaChoice();
                 }
                 else if (IsPressed(keys, _prevKeys, Keys.N))
                 {
                     _match.FighterB.Definition.Persona.OnOpponentChoice(
                         _match.FighterB, _match.FighterA, false, _match, _match.FighterB.PersonaState);
-                    if (_match.FighterA.Definition.Persona.RequiresOpponentRoundStartChoice(
-                            _match.FighterA, _match.FighterB, _match, _match.FighterA.PersonaState))
-                    {
-                        if (_match.FighterBIsHuman) { _match.Phase = MatchPhase.PersonaChoiceB; }
-                        else
-                        {
-                            bool aiB = _match.FighterA.Definition.Persona.ResolveAiOpponentChoice(
-                                _match.FighterA, _match.FighterB, _match, _match.FighterA.PersonaState);
-                            _match.FighterA.Definition.Persona.OnOpponentChoice(
-                                _match.FighterA, _match.FighterB, aiB, _match, _match.FighterA.PersonaState);
-                            EnterCardSelection();
-                        }
-                    }
-                    else EnterCardSelection();
+                    AdvanceAfterFighterBPersonaChoice();
                 }
             }
             else if (_match.Phase == MatchPhase.PersonaChoiceB)
@@ -456,10 +443,58 @@ public class FightScreen : GameScreen
                     EnterCardSelection();
                 }
             }
+            else if (_match.Phase == MatchPhase.PersonaSelfChoiceA)
+            {
+                if (IsPressed(keys, _prevKeys, Keys.Y))
+                {
+                    _match.FighterA.Definition.Persona.OnSelfChoice(
+                        _match.FighterA, _match.FighterB, true, _match, _match.FighterA.PersonaState);
+                    _preRoundLog.Add(_match.FighterA.Definition.Persona.GetSelfChoicePrompt(
+                        _match.FighterA, _match.FighterB, _match.FighterA.PersonaState) is var p && p.Length > 0
+                        ? $"{_match.FighterA.DisplayName} spends from pool."
+                        : $"{_match.FighterA.DisplayName} activates self-choice.");
+                    AdvancePersonaSelfChoiceB();
+                }
+                else if (IsPressed(keys, _prevKeys, Keys.N))
+                {
+                    _match.FighterA.Definition.Persona.OnSelfChoice(
+                        _match.FighterA, _match.FighterB, false, _match, _match.FighterA.PersonaState);
+                    AdvancePersonaSelfChoiceB();
+                }
+            }
+            else if (_match.Phase == MatchPhase.PersonaSelfChoiceB)
+            {
+                if (IsPressed(keys, _prevKeys, Keys.Y))
+                {
+                    _match.FighterB.Definition.Persona.OnSelfChoice(
+                        _match.FighterB, _match.FighterA, true, _match, _match.FighterB.PersonaState);
+                    _preRoundLog.Add($"{_match.FighterB.DisplayName} spends from pool.");
+                    EnterCardSelection();
+                }
+                else if (IsPressed(keys, _prevKeys, Keys.N))
+                {
+                    _match.FighterB.Definition.Persona.OnSelfChoice(
+                        _match.FighterB, _match.FighterA, false, _match, _match.FighterB.PersonaState);
+                    EnterCardSelection();
+                }
+            }
             else if (_match.Phase == MatchPhase.MatchOver)
             {
-                if (IsPressed(keys, _prevKeys, Keys.Enter))
-                    HandleMatchEnd();
+                if (IsPressed(keys, _prevKeys, Keys.Enter) || IsPressed(keys, _prevKeys, Keys.Space))
+                {
+                    if (!_resolutionFullyDisplayed && _resolutionSteps.Count > 0)
+                    {
+                        _stepIndex = Math.Min(_stepIndex + 1, _resolutionSteps.Count - 1);
+                        if (_stepIndex >= _resolutionSteps.Count - 1)
+                            _resolutionFullyDisplayed = true;
+                    }
+                    else
+                    {
+                        HandleMatchEnd();
+                    }
+                }
+                if (IsPressed(keys, _prevKeys, Keys.R) && _resolutionFullyDisplayed)
+                    ReplayMatch();
             }
 
             if (IsPressed(keys, _prevKeys, Keys.Escape))
@@ -512,7 +547,6 @@ public class FightScreen : GameScreen
 
         // PvE / online PvP: AI picks immediately
         _match.SelectedPairB = AiEngine.SelectPair(_match.FighterB, _match.FighterA, _match.Board);
-
         StartMovementOrExecute();
     }
 
@@ -542,7 +576,6 @@ public class FightScreen : GameScreen
         _p2SelectedGeneric = null;
         _p2ValidUniques.Clear();
         _pvpPhase = LocalPvpPhase.NotApplicable;
-
         StartMovementOrExecute();
     }
 
@@ -566,7 +599,7 @@ public class FightScreen : GameScreen
             if (_moveForcedMin > 0 && _validMoveHexes.Count == 0)
             {
                 _match.ChosenMoveA = null;
-                ExecuteRound();
+                ShowCardReveal();
                 return;
             }
             _moveSelectionIndex = _moveForcedMin > 0 ? 1 : 0;
@@ -575,16 +608,67 @@ public class FightScreen : GameScreen
         else
         {
             _match.ChosenMoveA = null;
-            ExecuteRound();
+            ShowCardReveal();
         }
+    }
+
+    private void ShowCardReveal()
+    {
+        _match.Phase = MatchPhase.CardReveal;
     }
 
     private void ExecuteRound()
     {
         var round = ResolutionEngine.ResolveFirstHalf(_match);
+        _firstHalfLogCount = round.FirstHalfLogCount;
+        _needsSecondHalf = _match.Phase == MatchPhase.RoundMidpoint;
+        int firstHalfEnd = _needsSecondHalf ? _firstHalfLogCount : round.Log.Count;
+        _resolutionSteps = BuildResolutionSteps(round.Log.Take(firstHalfEnd).ToList());
+        _stepIndex = 0;
+        _resolutionFullyDisplayed = false;
         _roundLog = round.Log.ToList();
-        // If phase is RoundMidpoint, _roundLog holds the partial (first-half) log.
-        // ResolveSecondHalf will be called when the player presses Enter/Space.
+    }
+
+    private void AdvanceResolutionStep()
+    {
+        _stepIndex++;
+        if (_stepIndex >= _resolutionSteps.Count)
+        {
+            if (_needsSecondHalf)
+            {
+                ResolutionEngine.ResolveSecondHalf(_match);
+                _roundLog = _match.CurrentRoundState!.Log.ToList();
+                var secondHalfLines = _roundLog.Skip(_firstHalfLogCount).ToList();
+                var secondHalfSteps = BuildResolutionSteps(secondHalfLines);
+                _resolutionSteps.AddRange(secondHalfSteps);
+                _needsSecondHalf = false;
+                if (_stepIndex >= _resolutionSteps.Count)
+                    _resolutionFullyDisplayed = true;
+            }
+            else
+            {
+                _resolutionFullyDisplayed = true;
+            }
+        }
+    }
+
+    private static List<List<string>> BuildResolutionSteps(List<string> lines)
+    {
+        var steps = new List<List<string>>();
+        var current = new List<string>();
+        foreach (var line in lines)
+        {
+            bool startsNew = line.Contains(" moves to ") || line.StartsWith("Simultaneous:");
+            if (startsNew && current.Count > 0)
+            {
+                steps.Add(current);
+                current = new List<string>();
+            }
+            current.Add(line);
+        }
+        if (current.Count > 0)
+            steps.Add(current);
+        return steps;
     }
 
     private void StartNewRound()
@@ -661,13 +745,82 @@ public class FightScreen : GameScreen
             if (aiB) _preRoundLog.Add($"[{_match.FighterA.DisplayName}] AI opponent spends a Curse token (-1 Power/-1 Speed).");
         }
 
+        AdvancePersonaSelfChoiceA();
+    }
+
+    private void AdvancePersonaSelfChoiceA()
+    {
+        // FighterA's persona may offer FighterA a self-choice
+        if (_match.FighterA.Definition.Persona.RequiresSelfRoundStartChoice(
+                _match.FighterA, _match.FighterB, _match, _match.FighterA.PersonaState))
+        {
+            if (_match.FighterAIsHuman)
+            {
+                _match.Phase = MatchPhase.PersonaSelfChoiceA;
+                return;
+            }
+            bool aiSelf = _match.FighterA.Definition.Persona.ResolveAiSelfChoice(
+                _match.FighterA, _match.FighterB, _match, _match.FighterA.PersonaState);
+            _match.FighterA.Definition.Persona.OnSelfChoice(
+                _match.FighterA, _match.FighterB, aiSelf, _match, _match.FighterA.PersonaState);
+            if (aiSelf) _preRoundLog.Add($"[{_match.FighterA.DisplayName}] spends from pool (+2 Pwr/+2 Spd).");
+        }
+
+        AdvancePersonaSelfChoiceB();
+    }
+
+    private void AdvancePersonaSelfChoiceB()
+    {
+        // FighterB's persona may offer FighterB a self-choice
+        if (_match.FighterB.Definition.Persona.RequiresSelfRoundStartChoice(
+                _match.FighterB, _match.FighterA, _match, _match.FighterB.PersonaState))
+        {
+            if (_match.FighterBIsHuman)
+            {
+                _match.Phase = MatchPhase.PersonaSelfChoiceB;
+                return;
+            }
+            bool aiSelf = _match.FighterB.Definition.Persona.ResolveAiSelfChoice(
+                _match.FighterB, _match.FighterA, _match, _match.FighterB.PersonaState);
+            _match.FighterB.Definition.Persona.OnSelfChoice(
+                _match.FighterB, _match.FighterA, aiSelf, _match, _match.FighterB.PersonaState);
+            if (aiSelf) _preRoundLog.Add($"[{_match.FighterB.DisplayName}] spends from pool (+2 Pwr/+2 Spd).");
+        }
+
         EnterCardSelection();
     }
 
     private void EnterCardSelection()
     {
         _match.Phase = MatchPhase.CardSelection;
+        _resolutionSteps.Clear();
+        _stepIndex = 0;
+        _resolutionFullyDisplayed = false;
+        _needsSecondHalf = false;
+        _roundLog.Clear();
         LoadAvailablePairs();
+    }
+
+    /// <summary>
+    /// After FighterB responds to FighterA's persona choice prompt, check whether
+    /// FighterA's persona also needs a choice from FighterB and advance accordingly.
+    /// </summary>
+    private void AdvanceAfterFighterBPersonaChoice()
+    {
+        if (_match.FighterA.Definition.Persona.RequiresOpponentRoundStartChoice(
+                _match.FighterA, _match.FighterB, _match, _match.FighterA.PersonaState))
+        {
+            if (_match.FighterBIsHuman) { _match.Phase = MatchPhase.PersonaChoiceB; }
+            else
+            {
+                bool aiB = _match.FighterA.Definition.Persona.ResolveAiOpponentChoice(
+                    _match.FighterA, _match.FighterB, _match, _match.FighterA.PersonaState);
+                _match.FighterA.Definition.Persona.OnOpponentChoice(
+                    _match.FighterA, _match.FighterB, aiB, _match, _match.FighterA.PersonaState);
+                EnterCardSelection();
+            }
+        }
+        else EnterCardSelection();
     }
 
     private void Resign()
@@ -684,6 +837,11 @@ public class FightScreen : GameScreen
         SwitchTo(ScreenType.PostMatch, (_match, won));
     }
 
+    private void ReplayMatch()
+    {
+        OnEnter(_replayData);
+    }
+
     public override void Draw(GameTime gameTime, SpriteBatch sb)
     {
         try
@@ -694,7 +852,8 @@ public class FightScreen : GameScreen
             DrawDamageStates(sb);
             DrawCardSelection(sb);
             DrawOpponentCards(sb);
-            DrawRoundLog(sb);
+            DrawResolutionStep(sb);
+            DrawCardReveal(sb);
             DrawStageChoicePrompt(sb);
             DrawPersonaChoicePrompt(sb);
             DrawStageHud(sb);
@@ -740,18 +899,21 @@ public class FightScreen : GameScreen
 
     private void DrawPersonaChoicePrompt(SpriteBatch sb)
     {
-        if (_match.Phase != MatchPhase.PersonaChoiceA && _match.Phase != MatchPhase.PersonaChoiceB)
+        bool isOpponentChoiceA = _match.Phase == MatchPhase.PersonaChoiceA;
+        bool isOpponentChoiceB = _match.Phase == MatchPhase.PersonaChoiceB;
+        bool isSelfChoiceA     = _match.Phase == MatchPhase.PersonaSelfChoiceA;
+        bool isSelfChoiceB     = _match.Phase == MatchPhase.PersonaSelfChoiceB;
+
+        if (!isOpponentChoiceA && !isOpponentChoiceB && !isSelfChoiceA && !isSelfChoiceB)
             return;
 
-        bool isA = _match.Phase == MatchPhase.PersonaChoiceA;
-        var promptingOwner = isA ? _match.FighterB : _match.FighterA;
-        var respondingFighter = isA ? _match.FighterA : _match.FighterB;
+        bool isA = isOpponentChoiceA || isSelfChoiceA;
         string fighterLabel = isA ? (_isLocalPvP ? "Player 1" : "Player") : "Player 2";
 
         int cx = Game.GraphicsDevice.Viewport.Width / 2;
         int logX = 20, logY = 560;
 
-        // Show pre-round log (token damage etc.)
+        // Show pre-round log
         for (int i = 0; i < Math.Min(_preRoundLog.Count, 6); i++)
         {
             var filtered = new System.Text.StringBuilder();
@@ -764,8 +926,29 @@ public class FightScreen : GameScreen
         }
 
         int promptY = Game.GraphicsDevice.Viewport.Height / 2 - 30;
-        string raw = promptingOwner.Definition.Persona.GetOpponentChoicePrompt(
-            promptingOwner, respondingFighter, promptingOwner.PersonaState);
+        string raw;
+        string header;
+        Color headerColor;
+
+        if (isSelfChoiceA || isSelfChoiceB)
+        {
+            var ownerFighter = isSelfChoiceA ? _match.FighterA : _match.FighterB;
+            var oppFighter   = isSelfChoiceA ? _match.FighterB : _match.FighterA;
+            raw = ownerFighter.Definition.Persona.GetSelfChoicePrompt(
+                ownerFighter, oppFighter, ownerFighter.PersonaState);
+            header     = $"{fighterLabel}: Your persona offers you a choice";
+            headerColor = Color.Cyan;
+        }
+        else
+        {
+            var promptingOwner   = isOpponentChoiceA ? _match.FighterB : _match.FighterA;
+            var respondingFighter = isOpponentChoiceA ? _match.FighterA : _match.FighterB;
+            raw = promptingOwner.Definition.Persona.GetOpponentChoicePrompt(
+                promptingOwner, respondingFighter, promptingOwner.PersonaState);
+            header     = $"{fighterLabel}: Opponent's ability";
+            headerColor = Color.Orchid;
+        }
+
         var filteredPrompt = new System.Text.StringBuilder();
         foreach (char c in raw)
         {
@@ -774,12 +957,11 @@ public class FightScreen : GameScreen
         }
         string safePrompt = filteredPrompt.ToString();
 
-        string header  = $"{fighterLabel}: Opponent's ability";
         string keyHint = "[Y] Accept   [N] Decline";
         float headerW = _font.MeasureString(header).X;
         float promptW = _smallFont.MeasureString(safePrompt).X;
         float keysW   = _smallFont.MeasureString(keyHint).X;
-        sb.DrawString(_font,      header,     new Vector2(cx - headerW / 2, promptY),      Color.Orchid);
+        sb.DrawString(_font,      header,     new Vector2(cx - headerW / 2, promptY),      headerColor);
         sb.DrawString(_smallFont, safePrompt, new Vector2(cx - promptW / 2, promptY + 28), Color.White);
         sb.DrawString(_smallFont, keyHint,    new Vector2(cx - keysW  / 2, promptY + 50),  Color.Yellow);
     }
@@ -1050,7 +1232,7 @@ public class FightScreen : GameScreen
                     string mvStrG = card.MaxMovement == 0 ? "-" :
                         card.MinMovement == card.MaxMovement ? $"{mvTypeG}{card.MaxMovement}" :
                         $"{mvTypeG}{card.MinMovement}-{card.MaxMovement}";
-                    string label = $"{(sel ? ">" : " ")} {card.Name}  [Spd:{card.BaseSpeed:+#;-#;0} Pwr:{card.BasePower} Def:{card.BaseDefense} Mv:{mvStrG}]";
+                    string label = $"{(sel ? ">" : " ")} {card.Name}  [Spd:{card.BaseSpeed:+#;-#;0} Pwr:{card.BasePower} Def:{card.BaseDefense} Mv:{mvStrG}]" + GetKeywordDisplay(card);
                     sb.DrawString(_smallFont, label, new Vector2(panelX, panelY + 24 + i * 18), c);
                 }
                 sb.DrawString(_smallFont, "[Up/Down] Navigate   [Enter] Select",
@@ -1087,7 +1269,7 @@ public class FightScreen : GameScreen
                     Color targetColor = card is UniqueCard uu &&
                         p2Defender.LocationStates[uu.PrimaryTarget].State == Models.Fighter.DamageState.Disabled
                         ? Color.Orange : Color.LightCyan;
-                    string label = $"{(sel ? ">" : " ")} {cardName}  [Spd:{card.BaseSpeed:+#;-#;0} Pwr:{card.BasePower} Def:{card.BaseDefense} Rng:{rangeStr}]";
+                    string label = $"{(sel ? ">" : " ")} {cardName}  [Spd:{card.BaseSpeed:+#;-#;0} Pwr:{card.BasePower} Def:{card.BaseDefense} Rng:{rangeStr}]" + GetKeywordDisplay(card);
                     sb.DrawString(_smallFont, label, new Vector2(panelX, panelY + 24 + i * 18), c);
                     var labelSize = _smallFont.MeasureString(label);
                     sb.DrawString(_smallFont, $" Aim:{targetStr}", new Vector2(panelX + labelSize.X, panelY + 24 + i * 18), targetColor);
@@ -1121,7 +1303,7 @@ public class FightScreen : GameScreen
                 string mvStrG = card.MaxMovement == 0 ? "-" :
                     card.MinMovement == card.MaxMovement ? $"{mvTypeG}{card.MaxMovement}" :
                     $"{mvTypeG}{card.MinMovement}-{card.MaxMovement}";
-                string label = $"{(sel ? ">" : " ")} {card.Name}  [Spd:{card.BaseSpeed:+#;-#;0} Pwr:{card.BasePower} Def:{card.BaseDefense} Mv:{mvStrG}]";
+                string label = $"{(sel ? ">" : " ")} {card.Name}  [Spd:{card.BaseSpeed:+#;-#;0} Pwr:{card.BasePower} Def:{card.BaseDefense} Mv:{mvStrG}]" + GetKeywordDisplay(card);
                 sb.DrawString(_smallFont, label, new Vector2(panelX, panelY + 24 + i * 18), c);
             }
 
@@ -1212,7 +1394,7 @@ public class FightScreen : GameScreen
                     _ => Color.LightCyan,
                 };
 
-                string label = $"{(sel ? ">" : " ")} {cardName}  [Spd:{card.BaseSpeed:+#;-#;0} Pwr:{card.BasePower} Def:{card.BaseDefense} Mv:{mvStr} Rng:{rangeStr}]";
+                string label = $"{(sel ? ">" : " ")} {cardName}  [Spd:{card.BaseSpeed:+#;-#;0} Pwr:{card.BasePower} Def:{card.BaseDefense} Mv:{mvStr} Rng:{rangeStr}]" + GetKeywordDisplay(card);
                 sb.DrawString(_smallFont, label, new Vector2(panelX, panelY + 24 + i * 18), c);
                 // Draw target indicator to the right of the main label
                 var labelSize = _smallFont.MeasureString(label);
@@ -1240,41 +1422,220 @@ public class FightScreen : GameScreen
         }
     }
 
-    private void DrawRoundLog(SpriteBatch sb)
+    private void DrawResolutionStep(SpriteBatch sb)
     {
-        if (_roundLog.Count == 0) return;
+        bool showDuring = _match.Phase == MatchPhase.RoundMidpoint ||
+                          _match.Phase == MatchPhase.RoundResult ||
+                          _match.Phase == MatchPhase.MatchOver;
+        if (!showDuring || _resolutionSteps.Count == 0) return;
 
         try
         {
-            int logX = 20, logY = 560;
-            sb.DrawString(_smallFont, "Round Log:_pl", new Vector2(logX, logY), Color.White);
-            for (int i = 0; i < Math.Min(_roundLog.Count, 10); i++)
+            int logX = 20, logY = 510;
+            int displayIdx = Math.Min(_stepIndex, _resolutionSteps.Count - 1);
+            var step = _resolutionSteps[displayIdx];
+
+            int totalSteps = _resolutionSteps.Count;
+            string stepLabel = $"Round action {displayIdx + 1}/{totalSteps}:";
+            sb.DrawString(_smallFont, stepLabel, new Vector2(logX, logY), new Color(150, 150, 200));
+            logY += 14;
+
+            int maxLines = Math.Min(step.Count, 7);
+            for (int i = 0; i < maxLines; i++)
             {
-                string logEntry = _roundLog[i];
-                // Filter to ASCII-only characters that the font supports
                 var filtered = new System.Text.StringBuilder();
-                foreach (char c in logEntry)
+                foreach (char c in step[i])
                 {
-                    if (c >= 32 && c <= 126)  // Printable ASCII range
-                        filtered.Append(c);
-                    else if (c == '\n' || c == '\t')
-                        filtered.Append(' ');  // Replace whitespace with space
+                    if (c >= 32 && c <= 126) filtered.Append(c);
+                    else if (c == '\n' || c == '\t') filtered.Append(' ');
                 }
                 string safeText = filtered.ToString();
-                sb.DrawString(_smallFont, safeText, new Vector2(logX, logY + 16 + i * 14), Color.LightGray);
+                // Indent lines (start with spaces) are keyword/detail lines — highlight differently
+                Color lineColor = step[i].StartsWith("  ") ? new Color(230, 190, 120) : Color.LightGray;
+                sb.DrawString(_smallFont, safeText, new Vector2(logX, logY + i * 14), lineColor);
             }
 
-            if (_match.Phase == MatchPhase.RoundMidpoint)
-                sb.DrawString(_smallFont, "[Enter/Space] Continue...",
-                    new Vector2(logX, logY + 16 + Math.Min(_roundLog.Count, 10) * 14), Color.Yellow);
-            else if (_match.Phase == MatchPhase.RoundResult)
-                sb.DrawString(_smallFont, "[Enter/Space] Next Round",
-                    new Vector2(logX, logY + 16 + Math.Min(_roundLog.Count, 10) * 14), Color.DimGray);
+            int promptY = logY + maxLines * 14 + 4;
+
+            if (_match.Phase == MatchPhase.MatchOver && _resolutionFullyDisplayed)
+            {
+                // Handled by DrawMatchOver
+            }
+            else if (_match.Phase == MatchPhase.MatchOver)
+            {
+                sb.DrawString(_smallFont, "[Enter] Continue...", new Vector2(logX, promptY), Color.Yellow);
+            }
+            else if (_resolutionFullyDisplayed)
+            {
+                sb.DrawString(_smallFont, "[Enter/Space] Next Round", new Vector2(logX, promptY), Color.DimGray);
+            }
+            else
+            {
+                bool isMidpoint = _needsSecondHalf && displayIdx == _resolutionSteps.Count - 1;
+                string hint = isMidpoint ? "[Enter] Continue (opponent acts)..." : "[Enter] Next";
+                sb.DrawString(_smallFont, hint, new Vector2(logX, promptY), Color.Yellow);
+            }
         }
-        catch
+        catch { /* skip on error */ }
+    }
+
+    private void DrawCardReveal(SpriteBatch sb)
+    {
+        if (_match.Phase != MatchPhase.CardReveal) return;
+        if (_match.SelectedPairA == null || _match.SelectedPairB == null) return;
+
+        int screenW = Game.GraphicsDevice.Viewport.Width;
+        int screenH = Game.GraphicsDevice.Viewport.Height;
+
+        // Dark overlay panel covering lower portion of screen
+        sb.Draw(_pixel, new Rectangle(0, screenH / 2 - 40, screenW, screenH / 2 + 40), Color.Black * 0.88f);
+
+        var pairA = _match.SelectedPairA!;
+        var pairB = _match.SelectedPairB!;
+        var fa = _match.FighterA;
+        var fb = _match.FighterB;
+
+        // Compute combined stats (mirrors ResolutionEngine logic)
+        int rawSpeedA = 0;
+        if (pairA.Generic != null) rawSpeedA += fa.GetCardSpeed(pairA.Generic);
+        if (pairA.Unique != null) rawSpeedA += fa.GetCardSpeed(pairA.Unique);
+        else if (pairA.Special != null) rawSpeedA += fa.GetCardSpeed(pairA.Special);
+        int speedA = rawSpeedA + fa.RoundSpeedModifier;
+
+        int rawSpeedB = 0;
+        if (pairB.Generic != null) rawSpeedB += fb.GetCardSpeed(pairB.Generic);
+        if (pairB.Unique != null) rawSpeedB += fb.GetCardSpeed(pairB.Unique);
+        else if (pairB.Special != null) rawSpeedB += fb.GetCardSpeed(pairB.Special);
+        int speedB = rawSpeedB + fb.RoundSpeedModifier;
+
+        int powerA = (pairA.Generic?.BasePower ?? 0) + (pairA.Unique?.BasePower ?? pairA.Special?.BasePower ?? 0) + fa.RoundPowerModifier;
+        int defA   = (pairA.Generic?.BaseDefense ?? 0) + (pairA.Unique?.BaseDefense ?? pairA.Special?.BaseDefense ?? 0);
+        int powerB = (pairB.Generic?.BasePower ?? 0) + (pairB.Unique?.BasePower ?? pairB.Special?.BasePower ?? 0) + fb.RoundPowerModifier;
+        int defB   = (pairB.Generic?.BaseDefense ?? 0) + (pairB.Unique?.BaseDefense ?? pairB.Special?.BaseDefense ?? 0);
+
+        int panelY = screenH / 2 - 30;
+        int leftX  = 80;
+        int rightX = screenW - 420;
+        int cx     = screenW / 2;
+
+        // Header
+        string header = $"ROUND {_match.CurrentRound} - CARDS REVEALED";
+        float hw = _font.MeasureString(header).X;
+        sb.DrawString(_font, header, new Vector2(cx - hw / 2f, panelY), Color.Gold);
+        panelY += 32;
+
+        // Fighter names
+        sb.DrawString(_font, fa.DisplayName.ToUpper(), new Vector2(leftX, panelY), Color.CornflowerBlue);
+        string vsText = "VS";
+        float vsW = _font.MeasureString(vsText).X;
+        sb.DrawString(_font, vsText, new Vector2(cx - vsW / 2f, panelY), new Color(130, 130, 130));
+        sb.DrawString(_font, fb.DisplayName.ToUpper(), new Vector2(rightX, panelY), Color.Crimson);
+        panelY += 26;
+
+        // Generic card name (+ keywords)
+        string genNameA = pairA.Generic?.Name ?? pairA.Special?.Name ?? "?";
+        string genNameB = pairB.Generic?.Name ?? pairB.Special?.Name ?? "?";
+        string genKwA = pairA.Generic != null ? GetKeywordDisplay(pairA.Generic) : "";
+        string genKwB = pairB.Generic != null ? GetKeywordDisplay(pairB.Generic) : "";
+        sb.DrawString(_smallFont, genNameA + genKwA, new Vector2(leftX, panelY), Color.White);
+        sb.DrawString(_smallFont, genNameB + genKwB, new Vector2(rightX, panelY), Color.White);
+        panelY += 16;
+
+        // Unique/special card name (+ keywords)
+        if (pairA.Unique != null)
         {
-            // If anything goes wrong, just skip the round log display
+            string uniA = $"+ {pairA.Unique.Name}" + GetKeywordDisplay(pairA.Unique);
+            sb.DrawString(_smallFont, uniA, new Vector2(leftX, panelY), Color.LightGray);
         }
+        else if (pairA.Special != null && pairA.Generic == null)
+        {
+            sb.DrawString(_smallFont, $"+ {pairA.Special.Name}" + GetKeywordDisplay(pairA.Special), new Vector2(leftX, panelY), Color.LightGray);
+        }
+        if (pairB.Unique != null)
+        {
+            string uniB = $"+ {pairB.Unique.Name}" + GetKeywordDisplay(pairB.Unique);
+            sb.DrawString(_smallFont, uniB, new Vector2(rightX, panelY), Color.LightGray);
+        }
+        else if (pairB.Special != null && pairB.Generic == null)
+        {
+            sb.DrawString(_smallFont, $"+ {pairB.Special.Name}" + GetKeywordDisplay(pairB.Special), new Vector2(rightX, panelY), Color.LightGray);
+        }
+        panelY += 16;
+
+        // Combined stats
+        Color spdColorA = speedA > speedB ? Color.LimeGreen : speedA < speedB ? Color.OrangeRed : Color.White;
+        Color spdColorB = speedB > speedA ? Color.LimeGreen : speedB < speedA ? Color.OrangeRed : Color.White;
+        string statsA = $"Spd:{speedA:+#;-#;0}  Pwr:{powerA}  Def:{defA}";
+        string statsB = $"Spd:{speedB:+#;-#;0}  Pwr:{powerB}  Def:{defB}";
+        sb.DrawString(_smallFont, statsA, new Vector2(leftX, panelY), spdColorA);
+        sb.DrawString(_smallFont, statsB, new Vector2(rightX, panelY), spdColorB);
+        panelY += 16;
+
+        // Range and aim
+        string rangeA = $"Rng:{pairA.EffectiveMinRange}-{pairA.EffectiveMaxRange}";
+        string rangeB = $"Rng:{pairB.EffectiveMinRange}-{pairB.EffectiveMaxRange}";
+        string aimA   = GetRevealAimString(pairA);
+        string aimB   = GetRevealAimString(pairB);
+        sb.DrawString(_smallFont, $"{rangeA}  Aim:{aimA}", new Vector2(leftX, panelY), Color.LightCyan);
+        sb.DrawString(_smallFont, $"{rangeB}  Aim:{aimB}", new Vector2(rightX, panelY), Color.LightCyan);
+        panelY += 20;
+
+        // Speed order
+        string orderText;
+        Color orderColor;
+        if (speedA > speedB)
+        {
+            orderText  = $"{fa.DisplayName} acts FIRST";
+            orderColor = Color.LimeGreen;
+        }
+        else if (speedB > speedA)
+        {
+            orderText  = $"{fb.DisplayName} acts FIRST";
+            orderColor = Color.OrangeRed;
+        }
+        else
+        {
+            orderText  = "SIMULTANEOUS (tied speed)";
+            orderColor = Color.Yellow;
+        }
+        float ow = _smallFont.MeasureString(orderText).X;
+        sb.DrawString(_smallFont, orderText, new Vector2(cx - ow / 2f, panelY), orderColor);
+        panelY += 18;
+
+        // Pre-round log (persona/stage choices that happened this round)
+        if (_preRoundLog.Count > 0)
+        {
+            for (int i = 0; i < Math.Min(_preRoundLog.Count, 3); i++)
+            {
+                var filt = new System.Text.StringBuilder();
+                foreach (char c in _preRoundLog[i])
+                    if (c >= 32 && c <= 126) filt.Append(c);
+                float lw = _smallFont.MeasureString(filt.ToString()).X;
+                sb.DrawString(_smallFont, filt.ToString(), new Vector2(cx - lw / 2f, panelY + i * 13), new Color(220, 180, 100));
+            }
+            panelY += Math.Min(_preRoundLog.Count, 3) * 13;
+        }
+
+        // Prompt
+        string prompt = "[Enter/Space] Begin Round";
+        float pw = _smallFont.MeasureString(prompt).X;
+        sb.DrawString(_smallFont, prompt, new Vector2(cx - pw / 2f, panelY), Color.Yellow);
+    }
+
+    private static string GetRevealAimString(CardPair pair)
+    {
+        CardBase? card = pair.Unique ?? (CardBase?)pair.Special;
+        if (card == null) return "?";
+        return card switch
+        {
+            UniqueCard u  => u.PrimaryTarget == u.SecondaryTarget
+                ? u.PrimaryTarget.ToString()
+                : $"{u.PrimaryTarget}->{u.SecondaryTarget}",
+            SpecialCard s => s.PrimaryTarget == s.SecondaryTarget
+                ? s.PrimaryTarget.ToString()
+                : $"{s.PrimaryTarget}->{s.SecondaryTarget}",
+            _ => "?",
+        };
     }
 
     private void DrawMatchOver(SpriteBatch sb)
@@ -1296,8 +1657,13 @@ public class FightScreen : GameScreen
         }
         var sz = _font.MeasureString(result);
         sb.DrawString(_font, result, new Vector2(cx - sz.X / 2, cy - 20), col);
-        sb.DrawString(_smallFont, "[Enter] / [Esc] Continue",
-            new Vector2(cx - _smallFont.MeasureString("[Enter] / [Esc] Continue").X / 2, cy + 20), Color.White);
+        if (_resolutionFullyDisplayed)
+        {
+            sb.DrawString(_smallFont, "[Enter] / [Esc] Continue",
+                new Vector2(cx - _smallFont.MeasureString("[Enter] / [Esc] Continue").X / 2, cy + 20), Color.White);
+            sb.DrawString(_smallFont, "[R] Replay",
+                new Vector2(cx - _smallFont.MeasureString("[R] Replay").X / 2, cy + 38), new Color(150, 220, 150));
+        }
     }
 
     private void DrawResignConfirm(SpriteBatch sb)
@@ -1362,6 +1728,34 @@ public class FightScreen : GameScreen
 
     private static bool IsPressed(KeyboardState cur, KeyboardState prev, Keys key) =>
         cur.IsKeyDown(key) && prev.IsKeyUp(key);
+
+    /// <summary>Returns a compact keyword string for inline card display, e.g. " [Stagger,BLD]" or empty.</summary>
+    private static string GetKeywordDisplay(Models.Cards.CardBase card)
+    {
+        if (card.Keywords.Count == 0) return "";
+        var parts = card.Keywords.Select(kw => kw.Keyword switch
+        {
+            Models.Cards.CardKeyword.MaxDamageCap  => kw.Value == 1 ? "Cap:Brs" : kw.Value == 2 ? "Cap:Inj" : "Cap",
+            Models.Cards.CardKeyword.CurseGain     => "+Token",
+            Models.Cards.CardKeyword.CursePull     => "CursePull",
+            Models.Cards.CardKeyword.CurseEmpower  => "CurseEmp",
+            Models.Cards.CardKeyword.CurseWeaken   => "CurseWkn",
+            Models.Cards.CardKeyword.Bleed         => "Bleed",
+            Models.Cards.CardKeyword.ArmorBreak    => "ArmBrk",
+            Models.Cards.CardKeyword.Piercing      => "Pierce",
+            Models.Cards.CardKeyword.Crushing      => "Crush",
+            Models.Cards.CardKeyword.Stagger       => "Stagger",
+            Models.Cards.CardKeyword.Knockback     => "KB",
+            Models.Cards.CardKeyword.Lunge         => "Lunge",
+            Models.Cards.CardKeyword.Guard         => "Guard",
+            Models.Cards.CardKeyword.Parry         => "Parry",
+            Models.Cards.CardKeyword.Pull          => "Pull",
+            Models.Cards.CardKeyword.ChivalryBonus => $"ChivBonus+{kw.Value}",
+            Models.Cards.CardKeyword.DistanceGuard => $"DistGuard({kw.Value}+)",
+            _                                      => kw.Keyword.ToString(),
+        });
+        return " [" + string.Join(",", parts) + "]";
+    }
 
     private void UpdateCardHover(MouseState mouse, GameTime gameTime)
     {
@@ -1463,7 +1857,9 @@ public class FightScreen : GameScreen
                     || line.Contains("Lunge") || line.Contains("Stagger") || line.Contains("Disrupt")
                     || line.Contains("Knockback") || line.Contains("Guard") || line.Contains("Parry")
                     || line.Contains("Deflect") || line.Contains("Sidestep") || line.Contains("Press")
-                    || line.Contains("Retreat") || line.Contains("Kill")))
+                    || line.Contains("Retreat") || line.Contains("Kill")
+                    || line.Contains("Curse") || line.Contains("MaxDamage") || line.Contains("Cap:")
+                    || line.Contains("Pull") || line.Contains("Chivalry") || line.Contains("Distance")))
             {
                 lineColor = Color.LimeGreen;
             }

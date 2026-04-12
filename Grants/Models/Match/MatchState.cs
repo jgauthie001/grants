@@ -10,26 +10,25 @@ public enum MatchType { PvE, PvpCasual, PvpRanked }
 public enum MatchPhase
 {
     CardSelection,      // Both fighters choosing their pair
-    ResolutionMovement, // Applying movement in speed order
-    ResolutionAttack,   // Applying attacks in speed order
+    CardReveal,         // Both cards committed — show both pairs before resolution begins
     RoundMidpoint,      // Pause after first fighter acts, before second
     RoundResult,        // Displaying round outcome before next round
     StageChoiceA,       // Stage-specific choice prompt for Fighter A
     StageChoiceB,       // Stage-specific choice prompt for Fighter B
     PersonaChoiceA,     // Fighter A is offered a choice by Fighter B's persona
     PersonaChoiceB,     // Fighter B is offered a choice by Fighter A's persona
+    PersonaSelfChoiceA, // Fighter A is offered a self-choice by their OWN persona
+    PersonaSelfChoiceB, // Fighter B is offered a self-choice by their OWN persona
     MatchOver,          // One fighter KO'd
 }
 
 public enum RoundOutcome
 {
     Pending,
-    FighterAWins,       // Fighter A landed, B missed or was faster and countered
+    FighterAWins,       // Fighter A landed, B missed
     FighterBWins,
     BothHit,            // Simultaneous — both landed
     BothMissed,         // Out of range or both defended
-    FighterACountered,  // B's parry triggered
-    FighterBCountered,
 }
 
 /// <summary>
@@ -57,10 +56,6 @@ public class RoundState
 
     // Narrative log lines for display
     public List<string> Log { get; set; } = new();
-
-    // Status effects applied this round
-    public List<string> StatusEffectsOnA { get; set; } = new();
-    public List<string> StatusEffectsOnB { get; set; } = new();
 
     // Did each fighter miss due to movement?
     public bool FighterAMissed { get; set; } = false;
@@ -115,9 +110,6 @@ public class MatchState
     public int ConsecutiveNoDamageRounds { get; set; } = 0;
 
     public RoundState? CurrentRoundState { get; set; }
-
-    // Mid-round pause: log lines from first fighter's action displayed at RoundMidpoint
-    public List<string> MidRoundLog { get; set; } = new();
 
     public FighterInstance Opponent(FighterInstance fighter) =>
         fighter == FighterA ? FighterB : FighterA;

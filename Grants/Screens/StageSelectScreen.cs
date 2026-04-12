@@ -35,6 +35,7 @@ public class StageSelectScreen : GameScreen
     {
         _font = Game.DefaultFont;
         _smallFont = Game.SmallFont;
+        _prevKeys = Keyboard.GetState();
         _fightData = data;
         _selectedIndex = 0;
     }

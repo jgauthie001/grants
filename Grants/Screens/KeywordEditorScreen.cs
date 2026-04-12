@@ -38,6 +38,7 @@ public class KeywordEditorScreen : GameScreen
     {
         _font = Game.DefaultFont;
         _smallFont = Game.SmallFont;
+        _prevKeys = Keyboard.GetState();
         _pixel = Game.Pixel;
         _selectedIndex = 0;
         _editingMode = false;

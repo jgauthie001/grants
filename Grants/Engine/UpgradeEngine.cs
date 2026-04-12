@@ -64,6 +64,9 @@ public static class UpgradeEngine
             case CardUpgradeType.MovementBonus:
                 instance.UpgradedCardMovement[cid] = (instance.UpgradedCardMovement.TryGetValue(cid, out int m) ? m : 0) + effect.StatBonus;
                 break;
+            case CardUpgradeType.RangeExtension:
+                instance.UpgradedCardMaxRange[cid] = (instance.UpgradedCardMaxRange.TryGetValue(cid, out int rng) ? rng : 0) + effect.StatBonus;
+                break;
             case CardUpgradeType.CooldownReduction:
                 instance.UpgradedCardCooldownReduction[cid] = (instance.UpgradedCardCooldownReduction.TryGetValue(cid, out int cr) ? cr : 0) + effect.CooldownReduction;
                 break;

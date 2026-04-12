@@ -68,6 +68,7 @@ public class CharacterBuilderScreen : GameScreen
     {
         _font = Game.DefaultFont;
         _smallFont = Game.SmallFont;
+        _prevKeys = Keyboard.GetState();
 
         _fighters = new List<FighterDefinition>
         {

@@ -30,6 +30,7 @@ public class UpgradeTreeScreen : GameScreen
     {
         _font = Game.DefaultFont;
         _smallFont = Game.SmallFont;
+        _prevKeys = Keyboard.GetState();
         _pixel = Game.Pixel;
 
         _fighterId = data as string ?? "grants";

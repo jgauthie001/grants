@@ -46,11 +46,5 @@ public class CardUpgradeOption
         Description = description;
     }
 
-    public override string ToString()
-    {
-        if (Type == CardUpgradeType.AddKeyword)
-            return $"{Description}";
-        
-        return $"{Description}";
-    }
+    public override string ToString() => Description;
 }

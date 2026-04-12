@@ -140,6 +140,43 @@ public abstract class FighterPersona
         PersonaState state) { }
 
     /// <summary>
+    /// Return true if this persona wants to offer the OWNER a choice at round start
+    /// (before card selection). Called for both fighters' personas each round.
+    /// </summary>
+    public virtual bool RequiresSelfRoundStartChoice(
+        FighterInstance owner,
+        FighterInstance opponent,
+        MatchState match,
+        PersonaState state) => false;
+
+    /// <summary>
+    /// One-line prompt shown to the owner when a self-choice is required.
+    /// </summary>
+    public virtual string GetSelfChoicePrompt(
+        FighterInstance owner,
+        FighterInstance opponent,
+        PersonaState state) => "";
+
+    /// <summary>
+    /// AI decision when the owner must choose for themselves.
+    /// </summary>
+    public virtual bool ResolveAiSelfChoice(
+        FighterInstance owner,
+        FighterInstance opponent,
+        MatchState match,
+        PersonaState state) => false;
+
+    /// <summary>
+    /// Called once the owner (human or AI) has made their self-choice.
+    /// </summary>
+    public virtual void OnSelfChoice(
+        FighterInstance owner,
+        FighterInstance opponent,
+        bool accepted,
+        MatchState match,
+        PersonaState state) { }
+
+    /// <summary>
     /// Called each turn to decrement or update persona-specific cooldowns/effects.
     /// For example: trap despawn timers, ability cooldowns, stacks decay.
     /// </summary>

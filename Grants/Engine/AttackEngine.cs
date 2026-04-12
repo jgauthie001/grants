@@ -59,6 +59,10 @@ public static class AttackEngine
         if (atkKeywords.ContainsKeyword(CardKeyword.Lunge))
             maxRequiredRange++;
 
+        // Upgraded range extension bonus from upgrade tree
+        if (attackerPair.Generic != null)
+            maxRequiredRange += attacker.UpgradedCardMaxRange.GetValueOrDefault(attackerPair.Generic.Id, 0);
+
         result.InRange = currentDistance >= minRequiredRange && currentDistance <= maxRequiredRange;
         if (!result.InRange)
         {
@@ -118,6 +122,17 @@ public static class AttackEngine
             result.TriggeredKeywords.Add(new CardKeywordValue(CardKeyword.Guard));
         }
 
+        // DistanceGuard: if distance >= threshold, defender gains +2 defense
+        if (defKeywords.ContainsKeyword(CardKeyword.DistanceGuard))
+        {
+            int threshold = defKeywords.GetKeywordValue(CardKeyword.DistanceGuard);
+            if (currentDistance >= threshold)
+            {
+                defenderDefense += 2;
+                result.TriggeredKeywords.Add(new CardKeywordValue(CardKeyword.DistanceGuard, threshold));
+            }
+        }
+
         // CurseEmpower: +N power (N = owner's curse pool)
         if (atkKeywords.ContainsKeyword(CardKeyword.CurseEmpower))
         {
@@ -156,14 +171,57 @@ public static class AttackEngine
         }
 
         // --- Calculate damage steps ---
-        // 1 step per 2 net power (minimum 1 if landed)
-        result.NetDamageSteps = Math.Max(1, net / 2);
+        // Triangular cost: 1st step costs 1 net, 2nd costs 2, 3rd costs 3, etc.
+        // e.g. net=1 → 1 step, net=3 → 2 steps, net=6 → 3 steps
+        int stepsCalc = 0;
+        int stepCost = 1;
+        int remaining = net;
+        while (remaining >= stepCost)
+        {
+            remaining -= stepCost;
+            stepsCalc++;
+            stepCost++;
+        }
+        result.NetDamageSteps = stepsCalc;
+
+        // ChivalryBonus: +N damage steps if defender holds >=1 chivalry token
+        if (atkKeywords.ContainsKeyword(CardKeyword.ChivalryBonus))
+        {
+            int tokens = defender.PersonaState.Counters.GetValueOrDefault("chivalry_tokens", 0);
+            if (tokens > 0)
+            {
+                int bonus = atkKeywords.GetKeywordValue(CardKeyword.ChivalryBonus);
+                result.NetDamageSteps += bonus;
+                result.TriggeredKeywords.Add(new CardKeywordValue(CardKeyword.ChivalryBonus, bonus));
+            }
+        }
+
+        // DistanceGuard: if defending at range >= value, apply +2 defense (processed on defender's keywords)
+        // Note: DistanceGuard is checked earlier in the defense calculation above; handled below in defKeywords.
 
         // Crushing keyword: +1 damage step
         if (atkKeywords.ContainsKeyword(CardKeyword.Crushing))
         {
             result.NetDamageSteps++;
             result.TriggeredKeywords.Add(new CardKeywordValue(CardKeyword.Crushing));
+        }
+
+        // MaxDamageCap: defender's card caps how far a single hit can advance the target location
+        if (defKeywords.ContainsKeyword(CardKeyword.MaxDamageCap))
+        {
+            int cap = defKeywords.GetKeywordValue(CardKeyword.MaxDamageCap);
+            var locState = defender.LocationStates[result.TargetLocation];
+            int maxSteps = Math.Max(0, cap - (int)locState.State);
+            if (result.NetDamageSteps > maxSteps)
+            {
+                result.NetDamageSteps = maxSteps;
+                result.TriggeredKeywords.Add(new CardKeywordValue(CardKeyword.MaxDamageCap, cap));
+                string capName = cap == 1 ? "Bruised" : cap == 2 ? "Injured" : $"level {cap}";
+                if (maxSteps == 0)
+                    round.Log.Add($"  {defender.DisplayName}'s damage cap absorbs the hit — location already at or past {capName}!");
+                else
+                    round.Log.Add($"  {defender.DisplayName}'s damage cap: limited to {maxSteps} step(s) (max: {capName}).");
+            }
         }
 
         round.Log.Add(
@@ -199,6 +257,13 @@ public static class AttackEngine
             // Spatial movement is applied by ResolutionEngine after Resolve() returns
         }
 
+        // Pull: pull opponent 1 hex toward attacker on hit
+        if (atkKeywords.ContainsKeyword(CardKeyword.Pull))
+        {
+            if (!defender.ActiveImmunities.Contains(CombatImmunity.Pull))
+                result.TriggeredKeywords.Add(new CardKeywordValue(CardKeyword.Pull));
+        }
+
         // CurseGain: extra pool token on hit (handled by OnLandedHit via triggered keyword)
         if (atkKeywords.ContainsKeyword(CardKeyword.CurseGain))
             result.TriggeredKeywords.Add(new CardKeywordValue(CardKeyword.CurseGain));
@@ -224,14 +289,19 @@ public static class AttackEngine
         // --- Apply damage ---
         defender.LocationStates[result.TargetLocation].ApplyDamage(result.NetDamageSteps);
 
-        // Record last hit location so stage hooks can reference it
-        bool defenderIsA = round.PairA != null && ReferenceEquals(defender, null)
-            ? false
-            : round.PairB != null && !ReferenceEquals(attackerPair, round.PairA);
+        // Record last hit location and accumulate per-location damage for disruption checks
         if (ReferenceEquals(attackerPair, round.PairA))
+        {
             round.LastHitOnB = result.TargetLocation;
+            round.DamageToB.TryGetValue(result.TargetLocation, out int prevB);
+            round.DamageToB[result.TargetLocation] = prevB + result.NetDamageSteps;
+        }
         else
+        {
             round.LastHitOnA = result.TargetLocation;
+            round.DamageToA.TryGetValue(result.TargetLocation, out int prevA);
+            round.DamageToA[result.TargetLocation] = prevA + result.NetDamageSteps;
+        }
 
         return result;
     }

@@ -22,6 +22,7 @@ public class ProfileScreen : GameScreen
     {
         _font = Game.DefaultFont;
         _smallFont = Game.SmallFont;
+        _prevKeys = Keyboard.GetState();
         _pixel = Game.Pixel;
         _historyScroll = 0;
     }

@@ -22,6 +22,7 @@ public class MainMenuScreen : GameScreen
         _font = Game.DefaultFont;
         _smallFont = Game.SmallFont;
         _pixel = Game.Pixel;
+        _prevKeys = Keyboard.GetState();
     }
 
     public override void Update(GameTime gameTime)

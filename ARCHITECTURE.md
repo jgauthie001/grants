@@ -26,7 +26,8 @@ E:\grants\
     │   └── Match/           # Match state, player profile, records
     ├── Engine/              # Pure-logic systems (no MonoGame)
     ├── Fighters/
-    │   └── Grants/          # Grants fighter cards + upgrade tree
+    │   ├── Grants/          # Grants fighter cards + upgrade tree
+    │   └── Cursed/          # The Cursed fighter cards + persona
     └── Screens/             # MonoGame UI screens
 ```
 
@@ -68,11 +69,14 @@ Combined stats used for resolution:
 - `CombinedPower`, `CombinedDefense`, `CombinedMovement` — same pattern
 - `AllKeywords` — union of both cards' keywords
 
-### Keywords (17)
+### Keywords (21)
 
 `Bleed` `ArmorBreak` `Piercing` `Crushing` `Feint` `Quickstep` `Lunge`
 `Stagger` `Disrupt` `Knockback` `Guard` `Parry` `Deflect` `Sidestep`
 `Press` `Retreat`
+
+Curse keywords (The Cursed only):
+`CurseGain` `CursePull` `CurseEmpower` `CurseWeaken`
 
 ## Damage Model
 
@@ -113,6 +117,7 @@ Retreat keyword).
 5. Apply cooldowns (Stagger adds +1 to loser's cooldowns).
 6. Check KO: `IsKnockedOut` = number of `Disabled` locations ≥ `KOThreshold`
    (default 2).
+7. Stalemate: 5 consecutive rounds with no damage dealt → draw.
 
 ## Upgrade System
 
@@ -139,11 +144,12 @@ Used for ±10 PvP Casual matchmaking.
 ```
 MainMenu
   ├─▶ FighterSelect (pve / pvp_casual / pvp_ranked)
-  │       └─▶ FightScreen
-  │               └─▶ PostMatchScreen
-  │                       ├─▶ UpgradeTreeScreen
-  │                       ├─▶ FighterSelect (rematch)
-  │                       └─▶ MainMenu
+  │       └─▶ StageSelect
+  │               └─▶ FightScreen
+  │                       └─▶ PostMatchScreen
+  │                               ├─▶ UpgradeTreeScreen
+  │                               ├─▶ FighterSelect (rematch)
+  │                               └─▶ MainMenu
   └─▶ ProfileScreen
           └─▶ MainMenu
 ```
@@ -177,10 +183,62 @@ Managed by `UpgradeEngine.SaveProfile` / `LoadOrCreateProfile`.
 - Mechanical identifiers (enum values, card IDs, method names) do **not**
   use `_pl`.
 
+## Persona System
+
+Each `FighterDefinition` carries a `FighterPersona` singleton. At match start
+`CreateRuntimeState()` produces a `PersonaState` attached to the `FighterInstance`.
+
+### Hooks
+
+| Hook | When called |
+|---|---|
+| `OnRoundResolutionStart` | Before attacks resolve; populate `ActiveImmunities`, set `RoundPowerModifier` / `RoundSpeedModifier` |
+| `OnLandedHit` | After each hit lands (called for both attacker and defender personas) |
+| `OnRoundResolutionComplete` | After all attacks and cooldowns for the round |
+| `RequiresOpponentRoundStartChoice` | Return true to offer the opponent a Y/N choice before card selection |
+| `GetOpponentChoicePrompt` | One-line prompt shown to the human opponent |
+| `ResolveAiOpponentChoice` | AI answer for the choice |
+| `OnOpponentChoice` | Apply effects of the accepted/declined choice |
+
+### Round-scoped modifiers
+
+`FighterInstance.RoundPowerModifier` and `RoundSpeedModifier` are applied in
+`AttackEngine` (power) and `ResolutionEngine` (speed), then cleared at the
+start of the next `StartNewRound()`.
+
+`FighterInstance.ActiveImmunities` (`HashSet<CombatImmunity>`) is cleared at
+the start of `ResolveFirstHalf` and populated by `OnRoundResolutionStart`.
+Immunity flags: `Push`, `Pull`, `DefenseReduction`, `PowerReduction`,
+`SpeedReduction`, `Stagger`, `Bleed`, `CurseToken`.
+
+### PersonaChoiceA / PersonaChoiceB phases
+
+After stage choices (pre-card-selection), `FightScreen.AdvancePersonaChoices()`
+checks both fighters' personas. If a human player must answer, the match
+enters `MatchPhase.PersonaChoiceA` or `PersonaChoiceB` and
+`DrawPersonaChoicePrompt` shows the prompt with [Y] Accept / [N] Decline.
+
+## Fighters
+
+| Fighter | Persona | Notes |
+|---|---|---|
+| Grants | StandardPersona | Balanced brawler; starter |
+| The Cursed | CursedPersona | Token-based; curse pool, transfers to opponent |
+
+### The Cursed — persona summary
+
+- **Pool** (0–3): gains 1 on every landed hit; overflow deals 2 self-damage steps.
+- `CurseGain` keyword: +1 extra pool token on hit.
+- After each gain, 1 token transfers from pool to opponent (0–3 cap).
+- **Opponent tokens**: each pre-round the opponent may spend 1 token for −1 Power / −1 Speed; if they don't hit The Cursed that round the token is returned.
+- `CursePull`: pull opponent N hexes (N = their tokens).
+- `CurseEmpower`: +N power (N = owner's pool).
+- `CurseWeaken`: −N defender defense (N = their tokens).
+
 ## Build
 
 ```bash
-cd E:\grants
+cd C:\projects\grants
 dotnet build Grants/Grants.csproj
 dotnet run --project Grants/Grants.csproj
 ```

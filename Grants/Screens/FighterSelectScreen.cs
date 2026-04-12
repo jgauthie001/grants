@@ -1,6 +1,7 @@
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Input;
+using Grants.Fighters.Chivalrous;
 using Grants.Fighters.Cursed;
 using Grants.Fighters.Grants;
 using Grants.Models.Fighter;
@@ -31,6 +32,7 @@ public class FighterSelectScreen : GameScreen
     {
         _font = Game.DefaultFont;
         _smallFont = Game.SmallFont;
+        _prevKeys = Keyboard.GetState();
         _matchType = data as string ?? "pve";
         _p1Selection = null;
         _selectingP2 = false;
@@ -40,6 +42,8 @@ public class FighterSelectScreen : GameScreen
         {
             GrantsFighter.CreateDefinition(),
             CursedFighter.CreateDefinition(),
+            CatalystFighter.CreateDefinition(),
+            ChivalrousFighter.CreateDefinition(),
         };
     }
 

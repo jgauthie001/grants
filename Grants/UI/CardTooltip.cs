@@ -32,6 +32,7 @@ public static class CardTooltip
         CardKeyword.Guard => "Guard: +2 defense this turn, but cannot attack",
         CardKeyword.Parry => "Parry: If opponent hits same body part, counter at +1 power",
         CardKeyword.Deflect => "Deflect: On being hit, redirects half damage to random location",
+        CardKeyword.MaxDamageCap => "Max Damage Cap: Caps how far one hit can advance this location (see card value)",
 
         // Positional
         CardKeyword.Sidestep => "Sidestep: Allows diagonal movement (ignores normal rules)",
@@ -40,6 +41,17 @@ public static class CardTooltip
 
         // Debug
         CardKeyword.Kill => "Kill [TEST]: Instantly defeats opponent (testing only)",
+
+        // Curse keywords
+        CardKeyword.CurseGain => "Curse Gain: On hit, gain 1 extra Curse token to The Cursed's pool",
+        CardKeyword.CursePull => "Curse Pull: On hit, pull opponent N hexes (N = their Curse tokens)",
+        CardKeyword.CurseEmpower => "Curse Empower: +N power this attack (N = The Cursed's pool)",
+        CardKeyword.CurseWeaken => "Curse Weaken: -N opponent defense this attack (N = their Curse tokens)",
+
+        // Chivalrous keywords
+        CardKeyword.Pull => "Pull: On hit, pull opponent 1 hex toward you",
+        CardKeyword.ChivalryBonus => "Chivalry Bonus: +N damage steps if opponent holds chivalry tokens",
+        CardKeyword.DistanceGuard => "Distance Guard: +2 defense if opponent is 3+ hexes away",
 
         _ => "Unknown keyword"
     };
@@ -107,11 +119,12 @@ public static class CardTooltip
             lines.Add("KEYWORDS:");
             foreach (var kw in card.Keywords)
             {
-                var desc = GetKeywordDescription(kw.Keyword);
+                // MaxDamageCap: include the cap level in the description
+                string desc = kw.Keyword == CardKeyword.MaxDamageCap
+                    ? $"Max Damage Cap: Hit cannot advance this location past {(kw.Value == 1 ? "Bruised" : kw.Value == 2 ? "Injured" : $"level {kw.Value}")}"
+                    : GetKeywordDescription(kw.Keyword);
                 if (!string.IsNullOrEmpty(desc))
-                {
                     lines.AddRange(WrapText(desc, 50));
-                }
             }
         }
 

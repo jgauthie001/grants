@@ -147,7 +147,14 @@ public static class ResolutionEngine
             else
                 round.Outcome = RoundOutcome.BothHit;
 
-            FinishRound(match, round);
+            // Disruption: if a fighter's generic card location took damage, apply +1 cooldown
+            bool aTieDamaged = WasPairedLocationDamaged(fa, pairA, round.DamageToA);
+            bool bTieDamaged = WasPairedLocationDamaged(fb, pairB, round.DamageToB);
+            if (aTieDamaged)
+                round.Log.Add($"  {fa.DisplayName}'s {pairA.Generic!.Name} disrupted by damage this round! (+1 cooldown)");
+            if (bTieDamaged)
+                round.Log.Add($"  {fb.DisplayName}'s {pairB.Generic!.Name} disrupted by damage this round! (+1 cooldown)");
+            FinishRound(match, round, aTieDamaged, bTieDamaged);
         }
 
         return round;
@@ -171,7 +178,8 @@ public static class ResolutionEngine
         if (round.FighterAFaster)
         {
             // A already acted; now B acts
-            bool bCancelled = IsPairedBodyPartDisabled(fb, pairB);
+            bool bLocDamaged = WasPairedLocationDamaged(fb, pairB, round.DamageToB);
+            bool bCancelled = IsPairedBodyPartDisabled(fb, pairB) || bLocDamaged;
             if (!bCancelled)
             {
                 match.Board.SetOccupied(posA, true);
@@ -191,19 +199,23 @@ public static class ResolutionEngine
             }
             else
             {
-                round.Log.Add($"{fb.DisplayName}'s action cancelled -- required body part disabled.");
+                if (IsPairedBodyPartDisabled(fb, pairB))
+                    round.Log.Add($"{fb.DisplayName}'s action cancelled -- required body part disabled.");
+                else
+                    round.Log.Add($"{fb.DisplayName}'s action disrupted -- location took damage this round! (+1 cooldown)");
             }
 
             // Determine outcome based on first-half attack result
-            bool aLanded = round.DamageToB.Count > 0 || round.Log.Skip(2).Take(round.FirstHalfLogCount - 2).Any(l => l.Contains("lands") || l.Contains("hit"));
             round.Outcome = bCancelled
                 ? RoundOutcome.FighterAWins
                 : RoundOutcome.BothHit; // refined below
+            FinishRound(match, round, false, bLocDamaged);
         }
         else // FighterBFaster
         {
             // B already acted; now A acts
-            bool aCancelled = IsPairedBodyPartDisabled(fa, pairA);
+            bool aLocDamaged = WasPairedLocationDamaged(fa, pairA, round.DamageToA);
+            bool aCancelled = IsPairedBodyPartDisabled(fa, pairA) || aLocDamaged;
             if (!aCancelled)
             {
                 match.Board.SetOccupied(posB, true);
@@ -223,25 +235,27 @@ public static class ResolutionEngine
             }
             else
             {
-                round.Log.Add($"{fa.DisplayName}'s action cancelled -- required body part disabled.");
+                if (IsPairedBodyPartDisabled(fa, pairA))
+                    round.Log.Add($"{fa.DisplayName}'s action cancelled -- required body part disabled.");
+                else
+                    round.Log.Add($"{fa.DisplayName}'s action disrupted -- location took damage this round! (+1 cooldown)");
             }
 
             round.Outcome = aCancelled
                 ? RoundOutcome.FighterBWins
                 : RoundOutcome.BothHit;
+            FinishRound(match, round, aLocDamaged, false);
         }
-
-        FinishRound(match, round);
     }
 
-    private static void FinishRound(MatchState match, RoundState round)
+    private static void FinishRound(MatchState match, RoundState round, bool aGenericHit = false, bool bGenericHit = false)
     {
         var fa = match.FighterA;
         var fb = match.FighterB;
 
         // ===== COOLDOWNS =====
-        ApplyCooldowns(fa, match.SelectedPairA!, fb.StaggerTurnsRemaining > 0);
-        ApplyCooldowns(fb, match.SelectedPairB!, fa.StaggerTurnsRemaining > 0);
+        ApplyCooldowns(fa, match.SelectedPairA!, fb.StaggerTurnsRemaining > 0, aGenericHit);
+        ApplyCooldowns(fb, match.SelectedPairB!, fa.StaggerTurnsRemaining > 0, bGenericHit);
 
         // ===== KO CHECK =====
         bool aKO = fa.IsKnockedOut();
@@ -307,13 +321,21 @@ public static class ResolutionEngine
         return fighter.LocationStates[loc].State == Models.Fighter.DamageState.Disabled;
     }
 
-    private static void ApplyCooldowns(FighterInstance fighter, CardPair pair, bool staggered)
+    private static bool WasPairedLocationDamaged(FighterInstance fighter, CardPair pair, Dictionary<BodyLocation, int> damageTaken)
+    {
+        if (pair.Generic == null) return false;
+        var loc = FighterInstance.BodyPartToLocation(pair.Generic.BodyPart);
+        return damageTaken.TryGetValue(loc, out int dmg) && dmg > 0;
+    }
+
+    private static void ApplyCooldowns(FighterInstance fighter, CardPair pair, bool staggered, bool locationHit = false)
     {
         int extraStagger = staggered ? 1 : 0;
+        int extraDamage = locationHit ? 1 : 0;
 
         if (pair.Generic != null)
         {
-            int cd = fighter.GetCardCooldown(pair.Generic) + extraStagger;
+            int cd = fighter.GetCardCooldown(pair.Generic) + extraStagger + extraDamage;
             fighter.SetCooldown(pair.Generic.Id, cd);
         }
         if (pair.Unique != null)
@@ -339,17 +361,34 @@ public static class ResolutionEngine
         HexBoard board,
         RoundState round)
     {
-        if (!result.Landed || !result.TriggeredKeywords.ContainsKeyword(CardKeyword.CursePull)) return;
+        if (!result.Landed) return;
 
-        int steps = defender.PersonaState.Counters.GetValueOrDefault("curse_tokens", 0);
-        if (steps == 0) return;
+        // CursePull: pull by curse token count
+        if (result.TriggeredKeywords.ContainsKeyword(CardKeyword.CursePull))
+        {
+            int steps = defender.PersonaState.Counters.GetValueOrDefault("curse_tokens", 0);
+            if (steps > 0)
+                PullDefender(attacker, defender, board, round, steps);
+        }
 
+        // Pull: pull by 1 hex
+        if (result.TriggeredKeywords.ContainsKeyword(CardKeyword.Pull))
+            PullDefender(attacker, defender, board, round, 1);
+    }
+
+    private static void PullDefender(
+        FighterInstance attacker,
+        FighterInstance defender,
+        HexBoard board,
+        RoundState round,
+        int steps)
+    {
         var defPos = new HexCoord(defender.HexQ, defender.HexR);
         var atkPos = new HexCoord(attacker.HexQ, attacker.HexR);
 
         for (int i = 0; i < steps; i++)
         {
-            if (defPos.DistanceTo(atkPos) <= 1) break; // Already adjacent
+            if (defPos.DistanceTo(atkPos) <= 1) break;
             var closest = defPos.GetNeighbors()
                 .Where(h => board.IsValid(h) && !board.IsOccupied(h))
                 .OrderBy(h => h.DistanceTo(atkPos))
