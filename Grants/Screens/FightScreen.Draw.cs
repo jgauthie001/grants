@@ -334,50 +334,76 @@ public partial class FightScreen
 
     private void DrawOpponentCards(SpriteBatch sb)
     {
-        var opp = _match.FighterB;
-        int x   = Layout.RightX;
-        int y   = 200;
-        const int GAP = 6;
+        var opp    = _match.FighterB;
+        int baseX  = Layout.RightX;
+        int y      = 200;
+        const int GAP  = 4;
+        const int CGAP = 4;   // gap between compact cards
 
-        sb.DrawString(_font, "Opponent Cards", new Vector2(x, y), Color.LightGray);
-        y += 26;
+        sb.DrawString(_font, "Opponent", new Vector2(baseX, y), Color.LightGray);
+        y += 22;
 
-        // Generic cards as widgets
-        sb.DrawString(_smallFont, "Body:", new Vector2(x, y), Color.DimGray);
-        y += 14;
-        foreach (var card in opp.Definition.GenericCards)
+        // ── Generic cards (Body) — 2 columns of compact widgets ──────────
+        var generics = opp.Definition.GenericCards;
+        if (generics.Count > 0)
         {
-            int cd = opp.GetCooldown(card.Id);
-            var loc = Models.Fighter.FighterInstance.BodyPartToLocation(card.BodyPart);
-            bool avail = opp.LocationStates[loc].State != Models.Fighter.DamageState.Disabled && cd == 0;
-            CardWidget.DrawGeneric(sb, _pixel, _font, _smallFont, card, opp,
-                x, y, selected: false, available: avail, cooldown: cd);
-            y += CardWidget.WIDGET_H + GAP;
+            sb.DrawString(_smallFont, "Body:", new Vector2(baseX, y), Color.DimGray);
+            y += 14;
+            int rows = (generics.Count + 1) / 2;
+            for (int i = 0; i < generics.Count; i++)
+            {
+                var card   = generics[i];
+                int cd     = opp.GetCooldown(card.Id);
+                var loc    = Models.Fighter.FighterInstance.BodyPartToLocation(card.BodyPart);
+                bool avail = opp.LocationStates[loc].State != Models.Fighter.DamageState.Disabled && cd == 0;
+                int wx     = baseX + (i % 2) * (CardWidget.WIDGET_W + CGAP);
+                int wy     = y    + (i / 2) * (CardWidget.COMPACT_H + CGAP);
+                CardWidget.DrawGenericCompact(sb, _pixel, _font, _smallFont, card, opp,
+                    wx, wy, selected: false, available: avail, cooldown: cd);
+            }
+            y += rows * (CardWidget.COMPACT_H + CGAP) + GAP;
         }
 
-        y += 4;
-        // Unique cards as widgets
-        sb.DrawString(_smallFont, "Moves:", new Vector2(x, y), Color.DimGray);
-        y += 14;
-        foreach (var card in opp.GetAllUniques())
+        // ── Unique cards (Moves) — 2 columns ─────────────────────────────
+        var uniques = opp.GetAllUniques();
+        if (uniques.Count > 0)
         {
-            int cd    = opp.GetCooldown(card.Id);
-            bool avail = cd == 0;
-            CardWidget.DrawUnique(sb, _pixel, _font, _smallFont, card, opp,
-                x, y, selected: false, available: avail, cooldown: cd, pairContext: null);
-            y += CardWidget.WIDGET_H + GAP;
+            sb.DrawString(_smallFont, "Moves:", new Vector2(baseX, y), Color.DimGray);
+            y += 14;
+            int rows = (uniques.Count + 1) / 2;
+            for (int i = 0; i < uniques.Count; i++)
+            {
+                var card   = uniques[i];
+                int cd     = opp.GetCooldown(card.Id);
+                bool avail = cd == 0;
+                int wx     = baseX + (i % 2) * (CardWidget.WIDGET_W + CGAP);
+                int wy     = y    + (i / 2) * (CardWidget.COMPACT_H + CGAP);
+                CardWidget.DrawUniqueCompact(sb, _pixel, _font, _smallFont, card, opp,
+                    wx, wy, selected: false, available: avail, cooldown: cd);
+            }
+            y += rows * (CardWidget.COMPACT_H + CGAP) + GAP;
         }
 
-        // Special cards
-        foreach (var card in opp.Definition.SpecialCards)
+        // ── Special cards — 2 columns ─────────────────────────────────────
+        var specials = opp.Definition.SpecialCards;
+        if (specials.Count > 0)
         {
-            int cd    = opp.GetCooldown(card.Id);
-            bool avail = cd == 0;
-            CardWidget.DrawSpecial(sb, _pixel, _font, _smallFont, card, opp,
-                x, y, selected: false, available: avail, cooldown: cd);
-            y += CardWidget.WIDGET_H + GAP;
+            sb.DrawString(_smallFont, "Specials:", new Vector2(baseX, y), Color.DimGray);
+            y += 14;
+            int rows = (specials.Count + 1) / 2;
+            for (int i = 0; i < specials.Count; i++)
+            {
+                var card   = specials[i];
+                int cd     = opp.GetCooldown(card.Id);
+                bool avail = cd == 0;
+                int wx     = baseX + (i % 2) * (CardWidget.WIDGET_W + CGAP);
+                int wy     = y    + (i / 2) * (CardWidget.COMPACT_H + CGAP);
+                CardWidget.DrawSpecialCompact(sb, _pixel, _font, _smallFont, card, opp,
+                    wx, wy, selected: false, available: avail, cooldown: cd);
+            }
         }
     }
+
     private void DrawDamageStates(SpriteBatch sb)
     {
         DrawFighterHealth(sb, _match.FighterA, 20, 20, true);
