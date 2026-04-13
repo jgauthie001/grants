@@ -22,6 +22,7 @@
 
 ## Gameplay
 
+- [ ] Movement system needs redesign — current movement behaviour isn't right; defer until design is clear
 - [ ] Mouse input support in `FightScreen` — click hex to select card pair
 - [ ] Local PvP: P2 movement selection — currently AI-resolved; P2 should choose hex destination when their card grants movement
 - [ ] Keyword effects not yet wired in `FightScreen` display (Parry counter, Knockback, etc.)

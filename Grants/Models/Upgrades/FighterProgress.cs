@@ -1,8 +1,8 @@
-namespace Grants.Models.Upgrades;
+﻿namespace Grants.Models.Upgrades;
 
 /// <summary>
 /// Per-player, per-fighter persistent progression data.
-/// Tracks wins, upgrade points, unlocked nodes, and ranked eligibility.
+/// Tracks wins, card usage, mastery events, and unlocked upgrade slots.
 /// Serialized to save file.
 /// </summary>
 public class FighterProgress
@@ -10,22 +10,10 @@ public class FighterProgress
     public string FighterId { get; init; } = string.Empty;
     public string PlayerId { get; set; } = string.Empty;
 
-    // Win tracking
+    // â”€â”€ Win tracking â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     public int TotalWins { get; set; } = 0;
     public int PveWins { get; set; } = 0;
     public int PvpCasualWins { get; set; } = 0;
-    // Ranked wins don't count toward upgrades
-
-    // Upgrade points (only PVE + casual pvp wins contribute)
-    public int UpgradePoints { get; set; } = 0;
-    public int SpentPoints { get; set; } = 0;
-    public int AvailablePoints => UpgradePoints - SpentPoints;
-
-    // Unlocked upgrade nodes
-    public HashSet<string> UnlockedNodes { get; set; } = new();
-
-    // Power rating (sum of unlocked node PowerRatingValues)
-    public int PowerRating { get; set; } = 0;
 
     // Ranked eligibility
     public bool IsRankedUnlocked => TotalWins >= 15;
@@ -33,57 +21,138 @@ public class FighterProgress
     // Elo rating (for ranked PvP)
     public double EloRating { get; set; } = 1200.0;
 
-    /// <summary>
-    /// Calculates upgrade points earned for a given win count.
-    /// Front-loaded: more points per win early on.
-    /// Wins 1-20: 1 pt/win. Wins 21-50: 1 pt/2 wins. Wins 51-100: 1 pt/3 wins.
-    /// </summary>
-    public static int CalculateTotalUpgradePoints(int wins)
+    // â”€â”€ Card usage tracking â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    /// <summary>Number of distinct matches each card was played in. Key = card ID.</summary>
+    public Dictionary<string, int> CardDistinctMatches { get; set; } = new();
+
+    /// <summary>Total landed hits with each card across all matches. Key = card ID.</summary>
+    public Dictionary<string, int> CardLandedHits { get; set; } = new();
+
+    /// <summary>Landed hits with each card against a faster opponent. Key = card ID.</summary>
+    public Dictionary<string, int> CardLandedVsFaster { get; set; } = new();
+
+    /// <summary>Landed hits with each card from >= 3 hexes away. Key = card ID.</summary>
+    public Dictionary<string, int> CardLandedAtRange { get; set; } = new();
+
+    /// <summary>Wins in matches where each card was played at least once. Key = card ID.</summary>
+    public Dictionary<string, int> CardWinsWithCard { get; set; } = new();
+
+    /// <summary>Number of times each card delivered a KO blow. Key = card ID.</summary>
+    public Dictionary<string, int> CardKillingBlows { get; set; } = new();
+
+    /// <summary>Named event counters for mastery conditions (e.g. "follow_through", "recoil"). Key = counter name.</summary>
+    public Dictionary<string, int> EventCounters { get; set; } = new();
+
+    // â”€â”€ Unlocked slots â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    /// <summary>Set of unlocked slot IDs ("cardId:slotIndex").</summary>
+    public HashSet<string> UnlockedSlots { get; set; } = new();
+
+    public bool IsSlotUnlocked(string slotId) => UnlockedSlots.Contains(slotId);
+
+    // â”€â”€ Mastery checking â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    public bool IsMasteryMet(CardUpgradeSlotDef slot, MasteryCondition mastery)
     {
-        int points = 0;
-        points += Math.Min(wins, 20);                         // wins 1-20
-        if (wins > 20) points += (Math.Min(wins, 50) - 20) / 2;  // wins 21-50
-        if (wins > 50) points += (Math.Min(wins, 100) - 50) / 3; // wins 51-100
-        if (wins > 100) points += (wins - 100) / 5;          // wins 100+: trickle
-        return points;
+        return mastery.Type switch
+        {
+            MasteryConditionType.PlayedInMatches =>
+                CardDistinctMatches.GetValueOrDefault(slot.CardId, 0) >= mastery.Target,
+            MasteryConditionType.LandedHits =>
+                CardLandedHits.GetValueOrDefault(slot.CardId, 0) >= mastery.Target,
+            MasteryConditionType.LandedVsFaster =>
+                CardLandedVsFaster.GetValueOrDefault(slot.CardId, 0) >= mastery.Target,
+            MasteryConditionType.LandedAtRange =>
+                CardLandedAtRange.GetValueOrDefault(slot.CardId, 0) >= mastery.Target,
+            MasteryConditionType.EventCounter =>
+                mastery.CounterKey != null &&
+                EventCounters.GetValueOrDefault(mastery.CounterKey, 0) >= mastery.Target,
+            MasteryConditionType.WonMatchWithCard =>
+                CardWinsWithCard.GetValueOrDefault(slot.CardId, 0) >= mastery.Target,
+            MasteryConditionType.WonWithKillingBlow =>
+                CardKillingBlows.GetValueOrDefault(slot.CardId, 0) >= mastery.Target,
+            _ => false,
+        };
     }
 
-    /// <summary>Record a win of the given type and recalculate upgrade points.</summary>
-    public void RecordWin(bool isPve, bool isCasualPvp)
+    // â”€â”€ Record end-of-match stats â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    /// <summary>Called at match end with a summary of what happened in that match.</summary>
+    public void RecordMatchResult(MatchResult result)
     {
-        TotalWins++;
-        if (isPve) PveWins++;
-        if (isCasualPvp) PvpCasualWins++;
+        if (result.Won)
+        {
+            TotalWins++;
+            if (result.IsPve) PveWins++;
+            if (result.IsCasualPvp) PvpCasualWins++;
+        }
 
-        int eligibleWins = PveWins + PvpCasualWins;
-        UpgradePoints = CalculateTotalUpgradePoints(eligibleWins);
+        // Card distinct matches: each card played gets +1 if not already counted this match
+        foreach (var cardId in result.CardsPlayed)
+        {
+            CardDistinctMatches[cardId] = CardDistinctMatches.GetValueOrDefault(cardId, 0) + 1;
+        }
+
+        // Landing stats
+        foreach (var (cardId, count) in result.LandedHitsPerCard)
+            CardLandedHits[cardId] = CardLandedHits.GetValueOrDefault(cardId, 0) + count;
+
+        foreach (var (cardId, count) in result.LandedVsFasterPerCard)
+            CardLandedVsFaster[cardId] = CardLandedVsFaster.GetValueOrDefault(cardId, 0) + count;
+
+        foreach (var (cardId, count) in result.LandedAtRangePerCard)
+            CardLandedAtRange[cardId] = CardLandedAtRange.GetValueOrDefault(cardId, 0) + count;
+
+        // Win-with-card
+        if (result.Won)
+        {
+            foreach (var cardId in result.CardsPlayed)
+                CardWinsWithCard[cardId] = CardWinsWithCard.GetValueOrDefault(cardId, 0) + 1;
+
+            if (result.KillingBlowCardId != null)
+                CardKillingBlows[result.KillingBlowCardId] =
+                    CardKillingBlows.GetValueOrDefault(result.KillingBlowCardId, 0) + 1;
+        }
+
+        // Event counters
+        foreach (var (key, count) in result.EventCounterDeltas)
+            EventCounters[key] = EventCounters.GetValueOrDefault(key, 0) + count;
     }
 
-    /// <summary>Update Elo rating after a ranked match. Called with opponent's Elo and whether player won.</summary>
+    public void UnlockSlot(string slotId) => UnlockedSlots.Add(slotId);
+
+    // â”€â”€ Elo â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     public void UpdateEloRating(double opponentElo, bool won)
     {
-        const double K_FACTOR = 32.0; // Standard K-factor for Elo calculation
-        
-        // Expected win probability
-        double expectedScore = 1.0 / (1.0 + Math.Pow(10.0, (opponentElo - EloRating) / 400.0));
-        
-        // Actual score (1.0 for win, 0.0 for loss)
-        double actualScore = won ? 1.0 : 0.0;
-        
-        // Calculate new Elo
-        double eloChange = K_FACTOR * (actualScore - expectedScore);
-        EloRating = Math.Max(1000.0, EloRating + eloChange);
+        const double K = 32.0;
+        double expected = 1.0 / (1.0 + Math.Pow(10.0, (opponentElo - EloRating) / 400.0));
+        double actual = won ? 1.0 : 0.0;
+        EloRating = Math.Max(1000.0, EloRating + K * (actual - expected));
     }
+}
 
-    public bool TryUnlockNode(UpgradeNode node)
-    {
-        if (AvailablePoints < node.Cost) return false;
-        SpentPoints += node.Cost;
-        PowerRating += node.PowerRatingValue;
-        UnlockedNodes.Add(node.Id);
-        return true;
-    }
+/// <summary>
+/// Summary of one match's events, passed to FighterProgress.RecordMatchResult().
+/// Built by UpgradeEngine at match end.
+/// </summary>
+public class MatchResult
+{
+    public bool Won { get; init; }
+    public bool IsPve { get; init; }
+    public bool IsCasualPvp { get; init; }
 
-    public bool HasItem(string itemId) =>
-        UnlockedNodes.Any(nid => nid == itemId);
+    /// <summary>Distinct card IDs played in this match (one entry per card, no duplicates).</summary>
+    public HashSet<string> CardsPlayed { get; init; } = new();
+
+    /// <summary>How many times each card's attack landed this match.</summary>
+    public Dictionary<string, int> LandedHitsPerCard { get; init; } = new();
+
+    /// <summary>Landed hits against a faster opponent per card.</summary>
+    public Dictionary<string, int> LandedVsFasterPerCard { get; init; } = new();
+
+    /// <summary>Landed hits at >= 3 hex range per card.</summary>
+    public Dictionary<string, int> LandedAtRangePerCard { get; init; } = new();
+
+    /// <summary>Named event counters that incremented this match (e.g. FollowThrough).</summary>
+    public Dictionary<string, int> EventCounterDeltas { get; init; } = new();
+
+    /// <summary>Card ID that landed the final KO, if any.</summary>
+    public string? KillingBlowCardId { get; init; }
 }

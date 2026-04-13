@@ -33,6 +33,11 @@ public class FighterInstance
     public Dictionary<string, int> UpgradedCardCooldownReduction { get; set; } = new();
     public Dictionary<string, List<CardKeywordValue>> UpgradedCardKeywords { get; set; } = new();
 
+    // --- Persona unlock flags from upgrade system ---
+    /// <summary>Named flags unlocked via Slot 3 PersonaUnlock upgrades. Personas query this to expand behaviours.</summary>
+    public HashSet<string> UnlockedPersonaIds { get; set; } = new();
+    public bool HasUpgrade(string personaUnlockId) => UnlockedPersonaIds.Contains(personaUnlockId);
+
     // --- Passive item effects (from upgrade tree items) ---
     public List<string> ActiveItemIds { get; set; } = new();
 
@@ -41,6 +46,7 @@ public class FighterInstance
 
     // --- Round-scoped stat modifiers (set by persona/stage choice hooks, cleared at StartNewRound) ---
     public int RoundPowerModifier { get; set; } = 0;
+    public int RoundDefenseModifier { get; set; } = 0;
     public int RoundSpeedModifier { get; set; } = 0;
 
     // --- Active immunities for this round (populated by OnRoundResolutionStart, cleared at round start) ---

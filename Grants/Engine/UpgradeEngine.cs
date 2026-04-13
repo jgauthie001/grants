@@ -1,4 +1,4 @@
-using Grants.Models.Cards;
+﻿using Grants.Models.Cards;
 using Grants.Models.Fighter;
 using Grants.Models.Match;
 using Grants.Models.Upgrades;
@@ -7,8 +7,8 @@ using System.Text.Json;
 namespace Grants.Engine;
 
 /// <summary>
-/// Handles applying upgrade tree progress to a FighterInstance before a match,
-/// and saving/loading PlayerProfile to disk.
+/// Applies upgrade progress to FighterInstances, records end-of-match stats,
+/// auto-unlocks newly met slots, and handles save/load.
 /// </summary>
 public static class UpgradeEngine
 {
@@ -17,90 +17,154 @@ public static class UpgradeEngine
         "Grants", "Saves");
 
     /// <summary>
-    /// Apply all unlocked upgrades from a FighterProgress to a FighterInstance.
-    /// Called at match start to configure the fighter's live stats.
+    /// Apply all unlocked upgrade slots from a FighterProgress to a FighterInstance.
+    /// No-op when match.UpgradesEnabled is false â€” safe to call unconditionally.
     /// </summary>
-    public static void ApplyProgressToInstance(FighterInstance instance, FighterProgress progress, UpgradeTree tree)
+    public static void ApplyProgressToInstance(
+        FighterInstance instance,
+        FighterProgress progress,
+        FighterUpgradeDef upgradeDef,
+        bool upgradesEnabled = true)
     {
-        foreach (var nodeId in progress.UnlockedNodes)
-        {
-            var node = tree.GetNode(nodeId);
-            if (node == null) continue;
+        if (!upgradesEnabled) return;
 
-            switch (node.NodeType)
-            {
-                case UpgradeNodeType.CardSlot:
-                    ApplyCardSlotUpgrade(instance, node);
-                    break;
-                case UpgradeNodeType.Item:
-                    ApplyItemEffect(instance, node.ItemEffect);
-                    if (node.ItemId != null)
-                        instance.ActiveItemIds.Add(node.ItemId);
-                    break;
-                case UpgradeNodeType.FinalNode:
-                    ApplyFinalNodeEffect(instance, node.FinalEffect);
-                    break;
-            }
+        foreach (var slotId in progress.UnlockedSlots)
+        {
+            var slot = upgradeDef.GetSlot(slotId);
+            if (slot == null) continue;
+            ApplySlot(instance, slot);
         }
     }
 
-    private static void ApplyCardSlotUpgrade(FighterInstance instance, UpgradeNode node)
+    private static void ApplySlot(FighterInstance instance, CardUpgradeSlotDef slot)
     {
-        if (node.TargetCardId == null || node.UpgradeEffect == null) return;
-        var effect = node.UpgradeEffect;
-        string cid = node.TargetCardId;
+        string cid = slot.CardId;
 
-        switch (effect.UpgradeType)
+        switch (slot.UpgradeType)
         {
-            case CardUpgradeType.PowerBonus:
-                instance.UpgradedCardPower[cid] = (instance.UpgradedCardPower.TryGetValue(cid, out int p) ? p : 0) + effect.StatBonus;
+            case SlotUpgradeType.PowerBonus:
+                instance.UpgradedCardPower[cid] = instance.UpgradedCardPower.GetValueOrDefault(cid, 0) + slot.StatBonus;
                 break;
-            case CardUpgradeType.DefenseBonus:
-                instance.UpgradedCardDefense[cid] = (instance.UpgradedCardDefense.TryGetValue(cid, out int d) ? d : 0) + effect.StatBonus;
+            case SlotUpgradeType.DefenseBonus:
+                instance.UpgradedCardDefense[cid] = instance.UpgradedCardDefense.GetValueOrDefault(cid, 0) + slot.StatBonus;
                 break;
-            case CardUpgradeType.SpeedBonus:
-                instance.UpgradedCardSpeed[cid] = (instance.UpgradedCardSpeed.TryGetValue(cid, out int s) ? s : 0) + effect.StatBonus;
+            case SlotUpgradeType.SpeedBonus:
+                instance.UpgradedCardSpeed[cid] = instance.UpgradedCardSpeed.GetValueOrDefault(cid, 0) + slot.StatBonus;
                 break;
-            case CardUpgradeType.MovementBonus:
-                instance.UpgradedCardMovement[cid] = (instance.UpgradedCardMovement.TryGetValue(cid, out int m) ? m : 0) + effect.StatBonus;
+            case SlotUpgradeType.MovementBonus:
+                instance.UpgradedCardMovement[cid] = instance.UpgradedCardMovement.GetValueOrDefault(cid, 0) + slot.StatBonus;
                 break;
-            case CardUpgradeType.RangeExtension:
-                instance.UpgradedCardMaxRange[cid] = (instance.UpgradedCardMaxRange.TryGetValue(cid, out int rng) ? rng : 0) + effect.StatBonus;
+            case SlotUpgradeType.CooldownReduction:
+                instance.UpgradedCardCooldownReduction[cid] = instance.UpgradedCardCooldownReduction.GetValueOrDefault(cid, 0) + slot.CooldownReduction;
                 break;
-            case CardUpgradeType.CooldownReduction:
-                instance.UpgradedCardCooldownReduction[cid] = (instance.UpgradedCardCooldownReduction.TryGetValue(cid, out int cr) ? cr : 0) + effect.CooldownReduction;
+            case SlotUpgradeType.RangeExtension:
+                instance.UpgradedCardMaxRange[cid] = instance.UpgradedCardMaxRange.GetValueOrDefault(cid, 0) + slot.StatBonus;
                 break;
-            case CardUpgradeType.AddKeyword:
+            case SlotUpgradeType.AddKeyword:
                 if (!instance.UpgradedCardKeywords.TryGetValue(cid, out var kws))
                     instance.UpgradedCardKeywords[cid] = kws = new();
-                if (!kws.ContainsKeyword(effect.KeywordAdded))
-                    kws.Add(new CardKeywordValue(effect.KeywordAdded));
+                // Add or update keyword value
+                var existing = kws.FirstOrDefault(k => k.Keyword == slot.KeywordAdded);
+                if (existing != null)
+                    existing.Value = Math.Max(existing.Value, slot.KeywordValue);
+                else
+                    kws.Add(new CardKeywordValue(slot.KeywordAdded, slot.KeywordValue));
+                break;
+            case SlotUpgradeType.PersonaUnlock:
+                if (slot.PersonaUnlockId != null)
+                    instance.UnlockedPersonaIds.Add(slot.PersonaUnlockId);
                 break;
         }
     }
 
-    private static void ApplyItemEffect(FighterInstance instance, ItemEffect? effect)
+    /// <summary>
+    /// Record end-of-match stats and auto-unlock any newly met slots.
+    /// Returns the list of newly unlocked slot IDs (for UI display).
+    /// </summary>
+    public static List<string> RecordMatchAndUnlock(
+        FighterProgress progress,
+        FighterUpgradeDef upgradeDef,
+        MatchResult result)
     {
-        if (effect == null) return;
-        if (effect.DamageCapLocation.HasValue && effect.DamageCap.HasValue)
-            instance.LocationStates[effect.DamageCapLocation.Value].DamageCap = effect.DamageCap.Value;
-    }
+        progress.RecordMatchResult(result);
 
-    private static void ApplyFinalNodeEffect(FighterInstance instance, FinalNodeEffect? effect)
-    {
-        if (effect == null) return;
-        ApplyItemEffect(instance, effect.Effect);
-
-        if (effect.SpecialCooldownReduction > 0)
+        var newlyUnlocked = new List<string>();
+        foreach (var slot in upgradeDef.Slots.Values)
         {
-            foreach (var special in instance.Definition.SpecialCards)
-                instance.UpgradedCardCooldownReduction[special.Id] =
-                    (instance.UpgradedCardCooldownReduction.TryGetValue(special.Id, out int cr) ? cr : 0)
-                    + effect.SpecialCooldownReduction;
+            if (!progress.IsSlotUnlocked(slot.SlotId) && upgradeDef.IsSlotAvailable(slot, progress))
+            {
+                progress.UnlockSlot(slot.SlotId);
+                newlyUnlocked.Add(slot.SlotId);
+            }
         }
+        return newlyUnlocked;
     }
 
-    // --- Save/Load ---
+    /// <summary>
+    /// Build a MatchResult from a completed MatchState.
+    /// Collects cards played by FighterA (the player), landing stats, and event counters.
+    /// </summary>
+    public static MatchResult BuildMatchResult(
+        MatchState match,
+        bool playerWon,
+        Dictionary<string, int>? eventCounterDeltas = null)
+    {
+        var cardsPlayed = new HashSet<string>();
+        var landedHits = new Dictionary<string, int>();
+        var landedVsFaster = new Dictionary<string, int>();
+        var landedAtRange = new Dictionary<string, int>();
+        string? killingBlow = null;
+
+        foreach (var round in match.History)
+        {
+            var pair = round.PairA; // FighterA = player
+            if (pair == null) continue;
+
+            // Track distinct cards played (generic + unique/special)
+            if (pair.Generic != null) cardsPlayed.Add(pair.Generic.Id);
+            if (pair.Unique != null) cardsPlayed.Add(pair.Unique.Id);
+            if (pair.Special != null) cardsPlayed.Add(pair.Special.Id);
+
+            // Determine attacking card (unique for damage intent)
+            string? atkCardId = pair.Unique?.Id ?? pair.Special?.Id;
+            if (atkCardId == null) continue;
+
+            bool aLanded = round.DamageToB.Count > 0;
+            bool aFaster = round.FighterAFaster;
+            int distAtAttack = new Models.Board.HexCoord(match.FighterA.HexQ, match.FighterA.HexR)
+                .DistanceTo(new Models.Board.HexCoord(match.FighterB.HexQ, match.FighterB.HexR));
+
+            if (aLanded)
+            {
+                landedHits[atkCardId] = landedHits.GetValueOrDefault(atkCardId, 0) + 1;
+
+                if (!aFaster) // A landed but was slower = landed vs faster opponent
+                    landedVsFaster[atkCardId] = landedVsFaster.GetValueOrDefault(atkCardId, 0) + 1;
+
+                if (distAtAttack >= 3)
+                    landedAtRange[atkCardId] = landedAtRange.GetValueOrDefault(atkCardId, 0) + 1;
+            }
+
+            // Killing blow: last round where B took damage that ended the match
+            if (playerWon && round == match.History[^1] && aLanded)
+                killingBlow = atkCardId;
+        }
+
+        return new MatchResult
+        {
+            Won = playerWon,
+            IsPve = match.MatchType == Models.Match.MatchType.PvE,
+            IsCasualPvp = match.MatchType == Models.Match.MatchType.PvpCasual,
+            CardsPlayed = cardsPlayed,
+            LandedHitsPerCard = landedHits,
+            LandedVsFasterPerCard = landedVsFaster,
+            LandedAtRangePerCard = landedAtRange,
+            EventCounterDeltas = eventCounterDeltas ?? new(),
+            KillingBlowCardId = killingBlow,
+        };
+    }
+
+    // â”€â”€ Save / Load â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     public static void SaveProfile(PlayerProfile profile)
     {

@@ -44,6 +44,12 @@ public class SpecialCard : CardBase
     /// </summary>
     public Fighter.BodyLocation SecondaryTarget { get; init; } = Fighter.BodyLocation.Torso;
 
+    /// <summary>Phase in which this card's attack fires. Default: Main.</summary>
+    public TurnPhase AttackPhase { get; set; } = TurnPhase.Main;
+
+    /// <summary>Phase in which this card's post-attack repositioning fires. Default: Finish.</summary>
+    public TurnPhase PostMovementPhase { get; set; } = TurnPhase.Finish;
+
     /// <summary>Deep-clones this card. Pass a new ID, or null to keep the same ID.</summary>
     public SpecialCard Clone(string? newId = null) => new SpecialCard
     {
@@ -67,5 +73,8 @@ public class SpecialCard : CardBase
         Standalone = Standalone,
         PrimaryTarget = PrimaryTarget,
         SecondaryTarget = SecondaryTarget,
+        AttackPhase = AttackPhase,
+        PostMovementPhase = PostMovementPhase,
+        MovementPhase = MovementPhase,
     };
 }

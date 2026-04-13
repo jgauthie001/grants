@@ -48,6 +48,12 @@ public class UniqueCard : CardBase
     /// </summary>
     public Fighter.BodyLocation SecondaryTarget { get; init; } = Fighter.BodyLocation.Torso;
 
+    /// <summary>Phase in which this card's attack fires. Default: Main.</summary>
+    public TurnPhase AttackPhase { get; set; } = TurnPhase.Main;
+
+    /// <summary>Phase in which this card's post-attack repositioning fires. Default: Finish.</summary>
+    public TurnPhase PostMovementPhase { get; set; } = TurnPhase.Finish;
+
     /// <summary>Deep-clones this card. Pass a new ID, or null to keep the same ID.</summary>
     public UniqueCard Clone(string? newId = null) => new UniqueCard
     {
@@ -71,5 +77,8 @@ public class UniqueCard : CardBase
         MaxRange = MaxRange,
         PrimaryTarget = PrimaryTarget,
         SecondaryTarget = SecondaryTarget,
+        AttackPhase = AttackPhase,
+        PostMovementPhase = PostMovementPhase,
+        MovementPhase = MovementPhase,
     };
 }

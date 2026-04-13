@@ -39,6 +39,11 @@ public static class CardTooltip
         CardKeyword.Press => "Press: After landing hit, move 1 hex toward opponent free",
         CardKeyword.Retreat => "Retreat: Your movement cannot be prevented this turn",
 
+        // Post-attack movement
+        CardKeyword.Recoil => "Recoil N: After your attack, automatically retreat N hex(es) (win or miss)",
+        CardKeyword.FollowThrough => "Follow Through N: On a landed hit, advance N hex(es) toward opponent",
+        CardKeyword.Disengage => "Disengage N: If your attack is out of range, retreat N hex(es) safely",
+
         // Debug
         CardKeyword.Kill => "Kill [TEST]: Instantly defeats opponent (testing only)",
 

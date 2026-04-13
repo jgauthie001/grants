@@ -66,5 +66,6 @@ public class GenericCard : CardBase
         SatisfiesTags = new List<string>(SatisfiesTags),
         MinRangeModifier = MinRangeModifier,
         MaxRangeModifier = MaxRangeModifier,
+        MovementPhase = MovementPhase,
     };
 }

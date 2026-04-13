@@ -1,14 +1,18 @@
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Input;
+using Grants.Engine;
+using Grants.Fighters.Grants;
 using Grants.Models.Fighter;
 using Grants.Models.Match;
+using Grants.Models.Upgrades;
 using MatchType = Grants.Models.Match.MatchType;
 
 namespace Grants.Screens;
 
 /// <summary>
-/// Displays match result, upgrade points earned, and navigation options.
+/// Displays match result and navigation options.
+/// Processes upgrade progress and transitions to UpgradeSelectionScreen.
 /// Data: (MatchState match, bool playerWon)
 /// </summary>
 public class PostMatchScreen : GameScreen
@@ -18,8 +22,6 @@ public class PostMatchScreen : GameScreen
 
     private MatchState _match = null!;
     private bool _playerWon;
-    private int _previousPoints;
-    private int _newPoints;
     private string _fighterId = string.Empty;
 
     private KeyboardState _prevKeys;
@@ -32,10 +34,6 @@ public class PostMatchScreen : GameScreen
 
         (_match, _playerWon) = ((MatchState, bool))data!;
         _fighterId = _match.FighterA.Definition.Id;
-
-        var progress = Game.PlayerProfile.GetOrCreateProgress(_fighterId);
-        _previousPoints = progress.AvailablePoints;
-        _newPoints = progress.AvailablePoints;
     }
 
     public override void Update(GameTime gameTime)
@@ -44,36 +42,20 @@ public class PostMatchScreen : GameScreen
 
         if (IsPressed(keys, _prevKeys, Keys.U))
         {
-            // Calculate points earned in this match
             var progress = Game.PlayerProfile.GetOrCreateProgress(_fighterId);
-            double eloBeforeRanked = progress.EloRating;
-            int pointsBefore = progress.AvailablePoints;
-            
-            // Update win record and ranked rating if applicable
-            if (_playerWon)
-            {
-                bool isPve = _match.MatchType == MatchType.PvE;
-                bool isCasual = _match.MatchType == MatchType.PvpCasual;
-                bool isRanked = _match.MatchType == MatchType.PvpRanked;
-                progress.RecordWin(isPve, isCasual);
-                
-                // Update Elo if ranked match
-                if (isRanked)
-                {
-                    // Get opponent's Elo (CPU Grants has default 1200)
-                    double opponentElo = 1200.0;
-                    progress.UpdateEloRating(opponentElo, true);
-                }
-            }
-            else if (_match.MatchType == MatchType.PvpRanked)
-            {
-                // Lost ranked match - still update Elo
-                progress.UpdateEloRating(1200.0, false);
-            }
-            
-            int pointsEarned = progress.AvailablePoints - pointsBefore;
-            double eloChangeRanked = progress.EloRating - eloBeforeRanked;
-            SwitchTo(ScreenType.UpgradeSelection, (_fighterId, pointsEarned));
+
+            // Update Elo for ranked matches
+            if (_match.MatchType == MatchType.PvpRanked)
+                progress.UpdateEloRating(1200.0, _playerWon);
+
+            // Build match result, record it, and auto-unlock newly met slots
+            // TODO: look up upgradeDef by fighter ID when more fighters are added
+            var upgradeDef = GrantsUpgrades.Create();
+            var result = UpgradeEngine.BuildMatchResult(_match, _playerWon);
+            var newlyUnlocked = UpgradeEngine.RecordMatchAndUnlock(progress, upgradeDef, result);
+
+            UpgradeEngine.SaveProfile(Game.PlayerProfile);
+            SwitchTo(ScreenType.UpgradeSelection, (_fighterId, newlyUnlocked));
         }
 
         if (IsPressed(keys, _prevKeys, Keys.R))
@@ -108,9 +90,9 @@ public class PostMatchScreen : GameScreen
         var rsz = _smallFont.MeasureString(rounds);
         sb.DrawString(_smallFont, rounds, new Vector2(cx - rsz.X / 2, 140), Color.LightGray);
 
-        // Upgrade points
+        // Wins
         var progress = Game.PlayerProfile.GetOrCreateProgress(_fighterId);
-        string pts = $"Upgrade points available: {progress.AvailablePoints}  (Total wins: {progress.TotalWins})";
+        string pts = $"Total wins: {progress.TotalWins}   Slots unlocked: {progress.UnlockedSlots.Count}";
         var psz = _smallFont.MeasureString(pts);
         sb.DrawString(_smallFont, pts, new Vector2(cx - psz.X / 2, 170), Color.LightGreen);
 

@@ -2,6 +2,7 @@ using Grants.Models.Cards;
 using Grants.Models.Fighter;
 using Grants.Models.Board;
 using Grants.Models.Stage;
+using Grants.Engine;
 
 namespace Grants.Models.Match;
 
@@ -19,6 +20,8 @@ public enum MatchPhase
     PersonaChoiceB,     // Fighter B is offered a choice by Fighter A's persona
     PersonaSelfChoiceA, // Fighter A is offered a self-choice by their OWN persona
     PersonaSelfChoiceB, // Fighter B is offered a self-choice by their OWN persona
+    PreRoundSelfChoiceA, // Persona: Fighter A makes a pre-round list-selection (generic protocol)
+    PreRoundSelfChoiceB, // Persona: Fighter B makes a pre-round list-selection (generic protocol)
     MatchOver,          // One fighter KO'd
 }
 
@@ -67,6 +70,18 @@ public class RoundState
 
     // How many log lines belong to the first fighter's action (for mid-round pause display)
     public int FirstHalfLogCount { get; set; } = 0;
+
+    /// <summary>
+    /// Cached priority player attack result set in ResolveFirstHalf.
+    /// Used by ResolveSecondHalf to apply the priority Final phase.
+    /// </summary>
+    internal AttackEngine.AttackResult? PriorityAttackResult { get; set; }
+
+    /// <summary>
+    /// Cached second-player attack result set in ResolveFirstHalf/ResolveSecondHalf.
+    /// Used by ResolveSecondHalf to apply the second fighter's Final phase post-move.
+    /// </summary>
+    internal AttackEngine.AttackResult? SecondAttackResult { get; set; }
 }
 
 /// <summary>
@@ -99,6 +114,12 @@ public class MatchState
     // Whether each fighter is human or AI-controlled
     public bool FighterAIsHuman { get; init; } = true;
     public bool FighterBIsHuman { get; init; } = false;
+
+    /// <summary>
+    /// When false, no upgrade effects are applied to either fighter.
+    /// Defaults true for PvE/Casual. Set false for Ranked or specific game modes.
+    /// </summary>
+    public bool UpgradesEnabled { get; init; } = true;
 
     // Match result
     public FighterInstance? Winner { get; set; }

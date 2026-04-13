@@ -6,24 +6,19 @@ using Grants.Models.Match;
 namespace Grants.Engine;
 
 /// <summary>
-/// Orchestrates a full round of combat:
-/// 1. Receive both committed card pairs
-/// 2. Determine speed order
-/// 3. Faster fighter: move then attack → pause (RoundMidpoint)
-/// 4. Slower fighter: move then attack (can be cancelled if disabled by step 3)
-/// 5. Speed tie: simultaneous move+attack → no midpoint pause
-/// 6. Process keywords, cooldowns
-/// 7. Check KO
+/// Orchestrates a full round of combat using the structured phase system:
+///   Start → Beginning (priority then second) → Main (priority then second) →
+///   Final (priority then second) → End.
+/// Cards declare which phase each action fires in via TurnPhase properties.
 /// Returns a RoundState (possibly partial — full state after ResolveSecondHalf).
 /// </summary>
 public static class ResolutionEngine
 {
     /// <summary>
-    /// Resolves the first fighter's action (move + attack).
-    /// Sets match.Phase = RoundMidpoint and returns the partial RoundState.
-    /// Call ResolveSecondHalf() after the player acknowledges.
-    ///
-    /// For speed ties, resolves the full round immediately (no midpoint pause).
+    /// Resolves the first half of a round:
+    ///   Beginning phase (both fighters) →
+    ///   Main phase, priority only → Pause (RoundMidpoint).
+    /// For speed ties, resolves all phases at once (no midpoint pause).
     /// </summary>
     public static RoundState ResolveFirstHalf(MatchState match)
     {
@@ -44,7 +39,7 @@ public static class ResolutionEngine
             RoundNumber = match.CurrentRound,
             PairA = pairA,
             PairB = pairB,
-            SpeedA = 0, SpeedB = 0, // placeholder — replaced below
+            SpeedA = 0, SpeedB = 0,
         };
         match.Stage.OnRoundStart(match, match.StageState);
         fa.Definition.Persona.OnRoundResolutionStart(preRound, match, fa, fb, fa.PersonaState);
@@ -63,103 +58,73 @@ public static class ResolutionEngine
             SpeedA = speedA + fa.RoundSpeedModifier,
             SpeedB = speedB + fb.RoundSpeedModifier,
         };
-
-        // Carry over any log lines written by the pre-round hooks
         round.Log.AddRange(preRound.Log);
-
-        var posA = new HexCoord(fa.HexQ, fa.HexR);
-        var posB = new HexCoord(fb.HexQ, fb.HexR);
-        var chosenMoveA = match.ChosenMoveA;
-
         round.Log.Add($"--- Round {round.RoundNumber} ---");
         round.Log.Add($"Speed: {fa.DisplayName}={speedA}, {fb.DisplayName}={speedB}.");
-
         match.CurrentRoundState = round;
 
-        if (round.FighterAFaster)
+        if (round.SpeedTie)
         {
-            // ===== FIRST: A moves then attacks =====
-            match.Board.SetOccupied(posB, true);
-            var newPosA = MovementEngine.ResolveMovement(fa, pairA, posA, posB, match.Board, chosenMoveA);
-            match.Board.SetOccupied(posB, false);
-            fa.HexQ = newPosA.Q; fa.HexR = newPosA.R;
-            int distA = newPosA.DistanceTo(posB);
-            round.Log.Add($"{fa.DisplayName} moves to {newPosA} (dist={distA}).");
-            var resultA1 = AttackEngine.Resolve(fa, pairA, fb, pairB, distA, round);
-            ApplyKnockback(resultA1, fa, fb, match.Board, round);
-            ApplyPull(resultA1, fa, fb, match.Board, round);
-            if (resultA1.Landed)
-            {
-                fa.Definition.Persona.OnLandedHit(fa, fb, pairA, resultA1, round, match, fa.PersonaState);
-                fb.Definition.Persona.OnLandedHit(fa, fb, pairA, resultA1, round, match, fb.PersonaState);
-            }
-            round.FirstHalfLogCount = round.Log.Count;
+            // ===== SPEED TIE: resolve all phases simultaneously, no midpoint pause =====
 
-            // Pause before second fighter
-            match.Phase = MatchPhase.RoundMidpoint;
-        }
-        else if (round.FighterBFaster)
-        {
-            // ===== FIRST: B moves then attacks =====
-            match.Board.SetOccupied(posA, true);
-            var newPosB = MovementEngine.ResolveMovement(fb, pairB, posB, posA, match.Board);
-            match.Board.SetOccupied(posA, false);
-            fb.HexQ = newPosB.Q; fb.HexR = newPosB.R;
-            int distB = posA.DistanceTo(newPosB);
-            round.Log.Add($"{fb.DisplayName} moves to {newPosB} (dist={distB}).");
-            var resultB1 = AttackEngine.Resolve(fb, pairB, fa, pairA, distB, round);
-            ApplyKnockback(resultB1, fb, fa, match.Board, round);
-            ApplyPull(resultB1, fb, fa, match.Board, round);
-            if (resultB1.Landed)
-            {
-                fb.Definition.Persona.OnLandedHit(fb, fa, pairB, resultB1, round, match, fb.PersonaState);
-                fa.Definition.Persona.OnLandedHit(fb, fa, pairB, resultB1, round, match, fa.PersonaState);
-            }
-            round.FirstHalfLogCount = round.Log.Count;
+            // === BEGINNING PHASE ===
+            round.Log.Add("--- Beginning Phase ---");
+            if (pairA.GenericMovementPhase == TurnPhase.Beginning)
+                ExecuteGenericMove(fa, pairA, fb, match, round, match.ChosenMoveA);
+            if (pairB.GenericMovementPhase == TurnPhase.Beginning)
+                ExecuteGenericMove(fb, pairB, fa, match, round, null);
 
-            // Pause before second fighter
-            match.Phase = MatchPhase.RoundMidpoint;
-        }
-        else
-        {
-            // ===== SPEED TIE: resolve fully now (no midpoint) =====
-            var newPosA = MovementEngine.ResolveMovement(fa, pairA, posA, posB, match.Board, chosenMoveA);
-            var newPosB = MovementEngine.ResolveMovement(fb, pairB, posB, posA, match.Board);
-            fa.HexQ = newPosA.Q; fa.HexR = newPosA.R;
-            fb.HexQ = newPosB.Q; fb.HexR = newPosB.R;
-            int dist = newPosA.DistanceTo(newPosB);
-            round.Log.Add($"Simultaneous: {fa.DisplayName} at {newPosA}, {fb.DisplayName} at {newPosB} (dist={dist}).");
+            // === MAIN PHASE (simultaneous) ===
+            round.Log.Add("--- Main Phase ---");
+            int dist = new HexCoord(fa.HexQ, fa.HexR).DistanceTo(new HexCoord(fb.HexQ, fb.HexR));
+            round.Log.Add($"Simultaneous: {fa.DisplayName} at ({fa.HexQ},{fa.HexR}), {fb.DisplayName} at ({fb.HexQ},{fb.HexR}) (dist={dist}).");
 
-            var resultA = AttackEngine.Resolve(fa, pairA, fb, pairB, dist, round);
-            ApplyKnockback(resultA, fa, fb, match.Board, round);
-            ApplyPull(resultA, fa, fb, match.Board, round);
-            if (resultA.Landed)
+            AttackEngine.AttackResult? resultA = null;
+            AttackEngine.AttackResult? resultB = null;
+
+            if (pairA.AttackPhase == TurnPhase.Main)
             {
-                fa.Definition.Persona.OnLandedHit(fa, fb, pairA, resultA, round, match, fa.PersonaState);
-                fb.Definition.Persona.OnLandedHit(fa, fb, pairA, resultA, round, match, fb.PersonaState);
+                var rA = AttackEngine.Resolve(fa, pairA, fb, pairB, dist, round);
+                ApplyKnockback(rA, fa, fb, match.Board, round);
+                ApplyPull(rA, fa, fb, match.Board, round);
+                if (rA.Landed)
+                {
+                    fa.Definition.Persona.OnLandedHit(fa, fb, pairA, rA, round, match, fa.PersonaState);
+                    fb.Definition.Persona.OnLandedHit(fa, fb, pairA, rA, round, match, fb.PersonaState);
+                }
+                resultA = rA;
             }
-            var resultB = AttackEngine.Resolve(fb, pairB, fa, pairA, dist, round);
-            ApplyKnockback(resultB, fb, fa, match.Board, round);
-            ApplyPull(resultB, fb, fa, match.Board, round);
-            if (resultB.Landed)
+            if (pairB.AttackPhase == TurnPhase.Main)
             {
-                fb.Definition.Persona.OnLandedHit(fb, fa, pairB, resultB, round, match, fb.PersonaState);
-                fa.Definition.Persona.OnLandedHit(fb, fa, pairB, resultB, round, match, fa.PersonaState);
+                var rB = AttackEngine.Resolve(fb, pairB, fa, pairA, dist, round);
+                ApplyKnockback(rB, fb, fa, match.Board, round);
+                ApplyPull(rB, fb, fa, match.Board, round);
+                if (rB.Landed)
+                {
+                    fb.Definition.Persona.OnLandedHit(fb, fa, pairB, rB, round, match, fb.PersonaState);
+                    fa.Definition.Persona.OnLandedHit(fb, fa, pairB, rB, round, match, fa.PersonaState);
+                }
+                resultB = rB;
             }
 
-            round.FighterAMissed = !resultA.InRange;
-            round.FighterBMissed = !resultB.InRange;
+            // === FINAL PHASE ===
+            round.Log.Add("--- Final Phase ---");
+            if (resultA.HasValue) ApplyAttackerPostMove(resultA.Value, fa, pairA, fb, match.Board, round);
+            if (resultB.HasValue) ApplyAttackerPostMove(resultB.Value, fb, pairB, fa, match.Board, round);
 
-            if (!resultA.Landed && !resultB.Landed)
+            // === OUTCOME ===
+            round.FighterAMissed = resultA.HasValue && !resultA.Value.InRange;
+            round.FighterBMissed = resultB.HasValue && !resultB.Value.InRange;
+
+            if (resultA?.Landed != true && resultB?.Landed != true)
                 round.Outcome = RoundOutcome.BothMissed;
-            else if (resultA.Landed && !resultB.Landed)
+            else if (resultA?.Landed == true && resultB?.Landed != true)
                 round.Outcome = RoundOutcome.FighterAWins;
-            else if (!resultA.Landed && resultB.Landed)
+            else if (resultA?.Landed != true && resultB?.Landed == true)
                 round.Outcome = RoundOutcome.FighterBWins;
             else
                 round.Outcome = RoundOutcome.BothHit;
 
-            // Disruption: if a fighter's generic card location took damage, apply +1 cooldown
             bool aTieDamaged = WasPairedLocationDamaged(fa, pairA, round.DamageToA);
             bool bTieDamaged = WasPairedLocationDamaged(fb, pairB, round.DamageToB);
             if (aTieDamaged)
@@ -167,96 +132,266 @@ public static class ResolutionEngine
             if (bTieDamaged)
                 round.Log.Add($"  {fb.DisplayName}'s {pairB.Generic!.Name} disrupted by damage this round! (+1 cooldown)");
             FinishRound(match, round, aTieDamaged, bTieDamaged);
+            return round;
         }
 
+        // Non-tie: determine priority and second fighters
+        bool aIsPriority  = round.FighterAFaster;
+        FighterInstance priority = aIsPriority ? fa : fb;
+        FighterInstance second   = aIsPriority ? fb : fa;
+        CardPair priorityPair    = aIsPriority ? pairA : pairB;
+        CardPair secondPair      = aIsPriority ? pairB : pairA;
+        // FighterA (human) always uses ChosenMoveA; FighterB (AI) always auto-resolves
+        HexCoord? priorityChosenMove = aIsPriority ? match.ChosenMoveA : null;
+        HexCoord? secondChosenMove   = aIsPriority ? null : match.ChosenMoveA;
+
+        // === BEGINNING PHASE — both fighters ===
+        round.Log.Add("--- Beginning Phase ---");
+        round.PriorityAttackResult = ExecuteFighterPhaseActions(
+            priority, priorityPair, second, secondPair,
+            TurnPhase.Beginning, match, round, priorityChosenMove, null);
+        round.SecondAttackResult = ExecuteFighterPhaseActions(
+            second, secondPair, priority, priorityPair,
+            TurnPhase.Beginning, match, round, secondChosenMove, null);
+
+        // === MAIN PHASE — priority only (second resolves in ResolveSecondHalf) ===
+        round.Log.Add("--- Main Phase ---");
+        round.PriorityAttackResult = ExecuteFighterPhaseActions(
+            priority, priorityPair, second, secondPair,
+            TurnPhase.Main, match, round, null, round.PriorityAttackResult);
+
+        round.FirstHalfLogCount = round.Log.Count;
+        match.Phase = MatchPhase.RoundMidpoint;
         return round;
     }
 
     /// <summary>
-    /// Resolves the second fighter's action after the mid-round pause.
+    /// Resolves the second half of a round after the mid-round pause:
+    ///   Main phase (second fighter) → Final phase (priority then second) → End phase.
     /// Only valid when match.Phase == RoundMidpoint.
     /// </summary>
     public static void ResolveSecondHalf(MatchState match)
     {
-        var round = match.CurrentRoundState!;
-        var pairA = match.SelectedPairA!;
-        var pairB = match.SelectedPairB!;
-        var fa = match.FighterA;
-        var fb = match.FighterB;
+        var round  = match.CurrentRoundState!;
+        var pairA  = match.SelectedPairA!;
+        var pairB  = match.SelectedPairB!;
+        var fa     = match.FighterA;
+        var fb     = match.FighterB;
 
-        var posA = new HexCoord(fa.HexQ, fa.HexR);
-        var posB = new HexCoord(fb.HexQ, fb.HexR);
+        bool aIsPriority  = round.FighterAFaster;
+        FighterInstance priority = aIsPriority ? fa : fb;
+        FighterInstance second   = aIsPriority ? fb : fa;
+        CardPair priorityPair    = aIsPriority ? pairA : pairB;
+        CardPair secondPair      = aIsPriority ? pairB : pairA;
 
-        if (round.FighterAFaster)
+        // === MAIN PHASE — SECOND ===
+        // Second's action can be disrupted if priority's Main attack damaged
+        // the body location associated with second's generic card.
+        var secondDamageTaken = aIsPriority ? round.DamageToB : round.DamageToA;
+        bool secondGenericHit = WasPairedLocationDamaged(second, secondPair, secondDamageTaken);
+        bool secondCancelled  = IsPairedBodyPartDisabled(second, secondPair) || secondGenericHit;
+
+        if (!secondCancelled)
         {
-            // A already acted; now B acts
-            bool bLocDamaged = WasPairedLocationDamaged(fb, pairB, round.DamageToB);
-            bool bCancelled = IsPairedBodyPartDisabled(fb, pairB) || bLocDamaged;
-            if (!bCancelled)
-            {
-                match.Board.SetOccupied(posA, true);
-                var newPosB = MovementEngine.ResolveMovement(fb, pairB, posB, posA, match.Board);
-                match.Board.SetOccupied(posA, false);
-                fb.HexQ = newPosB.Q; fb.HexR = newPosB.R;
-                int distB = posA.DistanceTo(newPosB);
-                round.Log.Add($"{fb.DisplayName} moves to {newPosB} (dist={distB}).");
-                var resultB2 = AttackEngine.Resolve(fb, pairB, fa, pairA, distB, round);
-                ApplyKnockback(resultB2, fb, fa, match.Board, round);
-                ApplyPull(resultB2, fb, fa, match.Board, round);
-                if (resultB2.Landed)
-                {
-                    fb.Definition.Persona.OnLandedHit(fb, fa, pairB, resultB2, round, match, fb.PersonaState);
-                    fa.Definition.Persona.OnLandedHit(fb, fa, pairB, resultB2, round, match, fa.PersonaState);
-                }
-            }
-            else
-            {
-                if (IsPairedBodyPartDisabled(fb, pairB))
-                    round.Log.Add($"{fb.DisplayName}'s action cancelled -- required body part disabled.");
-                else
-                    round.Log.Add($"{fb.DisplayName}'s action disrupted -- location took damage this round! (+1 cooldown)");
-            }
-
-            // Determine outcome based on first-half attack result
-            round.Outcome = bCancelled
-                ? RoundOutcome.FighterAWins
-                : RoundOutcome.BothHit; // refined below
-            FinishRound(match, round, false, bLocDamaged);
+            round.SecondAttackResult = ExecuteFighterPhaseActions(
+                second, secondPair, priority, priorityPair,
+                TurnPhase.Main, match, round, null, round.SecondAttackResult);
         }
-        else // FighterBFaster
+        else
         {
-            // B already acted; now A acts
-            bool aLocDamaged = WasPairedLocationDamaged(fa, pairA, round.DamageToA);
-            bool aCancelled = IsPairedBodyPartDisabled(fa, pairA) || aLocDamaged;
-            if (!aCancelled)
-            {
-                match.Board.SetOccupied(posB, true);
-                var newPosA = MovementEngine.ResolveMovement(fa, pairA, posA, posB, match.Board, match.ChosenMoveA);
-                match.Board.SetOccupied(posB, false);
-                fa.HexQ = newPosA.Q; fa.HexR = newPosA.R;
-                int distA = newPosA.DistanceTo(posB);
-                round.Log.Add($"{fa.DisplayName} moves to {newPosA} (dist={distA}).");
-                var resultA2 = AttackEngine.Resolve(fa, pairA, fb, pairB, distA, round);
-                ApplyKnockback(resultA2, fa, fb, match.Board, round);
-                ApplyPull(resultA2, fa, fb, match.Board, round);
-                if (resultA2.Landed)
-                {
-                    fa.Definition.Persona.OnLandedHit(fa, fb, pairA, resultA2, round, match, fa.PersonaState);
-                    fb.Definition.Persona.OnLandedHit(fa, fb, pairA, resultA2, round, match, fb.PersonaState);
-                }
-            }
+            if (IsPairedBodyPartDisabled(second, secondPair))
+                round.Log.Add($"{second.DisplayName}'s action cancelled -- required body part disabled.");
             else
-            {
-                if (IsPairedBodyPartDisabled(fa, pairA))
-                    round.Log.Add($"{fa.DisplayName}'s action cancelled -- required body part disabled.");
-                else
-                    round.Log.Add($"{fa.DisplayName}'s action disrupted -- location took damage this round! (+1 cooldown)");
-            }
+                round.Log.Add($"{second.DisplayName}'s action disrupted -- location took damage this round! (+1 cooldown)");
+        }
 
-            round.Outcome = aCancelled
-                ? RoundOutcome.FighterBWins
-                : RoundOutcome.BothHit;
-            FinishRound(match, round, aLocDamaged, false);
+        // === FINAL PHASE — priority then second ===
+        round.Log.Add("--- Final Phase ---");
+        ExecuteFighterPhaseActions(
+            priority, priorityPair, second, secondPair,
+            TurnPhase.Finish, match, round, null, round.PriorityAttackResult);
+        if (!secondCancelled)
+            ExecuteFighterPhaseActions(
+                second, secondPair, priority, priorityPair,
+                TurnPhase.Finish, match, round, null, round.SecondAttackResult);
+
+        // === OUTCOME ===
+        bool priorityLanded = round.PriorityAttackResult?.Landed == true;
+        bool secondLanded   = !secondCancelled && round.SecondAttackResult?.Landed == true;
+
+        if (priorityLanded && secondLanded)
+            round.Outcome = RoundOutcome.BothHit;
+        else if (priorityLanded)
+            round.Outcome = aIsPriority ? RoundOutcome.FighterAWins : RoundOutcome.FighterBWins;
+        else if (secondLanded)
+            round.Outcome = aIsPriority ? RoundOutcome.FighterBWins : RoundOutcome.FighterAWins;
+        else
+            round.Outcome = secondCancelled
+                ? (aIsPriority ? RoundOutcome.FighterAWins : RoundOutcome.FighterBWins)
+                : RoundOutcome.BothMissed;
+
+        round.FighterAMissed = aIsPriority
+            ? (round.PriorityAttackResult.HasValue && !round.PriorityAttackResult.Value.InRange)
+            : (!secondCancelled && round.SecondAttackResult.HasValue && !round.SecondAttackResult.Value.InRange);
+        round.FighterBMissed = aIsPriority
+            ? (!secondCancelled && round.SecondAttackResult.HasValue && !round.SecondAttackResult.Value.InRange)
+            : (round.PriorityAttackResult.HasValue && !round.PriorityAttackResult.Value.InRange);
+
+        bool aGenericHit = aIsPriority ? false : secondGenericHit;
+        bool bGenericHit = aIsPriority ? secondGenericHit : false;
+        FinishRound(match, round, aGenericHit, bGenericHit);
+    }
+
+    /// <summary>
+    /// Executes all phase-appropriate actions for one fighter:
+    ///   1. Generic movement (if declared for this phase)
+    ///   2. Attack (if declared for this phase)
+    ///   3. Post-attack repositioning (if declared for this phase)
+    /// Returns the most recent attack result (new result if attack fired, otherwise cachedAttackResult).
+    /// </summary>
+    private static AttackEngine.AttackResult? ExecuteFighterPhaseActions(
+        FighterInstance actor, CardPair actorPair,
+        FighterInstance opponent, CardPair opponentPair,
+        TurnPhase phase, MatchState match, RoundState round,
+        HexCoord? chosenMove,
+        AttackEngine.AttackResult? cachedAttackResult)
+    {
+        // 1. Generic card movement
+        if (actorPair.GenericMovementPhase == phase)
+            ExecuteGenericMove(actor, actorPair, opponent, match, round, chosenMove);
+
+        // 2. Attack
+        AttackEngine.AttackResult? newResult = null;
+        if (actorPair.AttackPhase == phase)
+        {
+            int dist = new HexCoord(actor.HexQ, actor.HexR)
+                           .DistanceTo(new HexCoord(opponent.HexQ, opponent.HexR));
+            var r = AttackEngine.Resolve(actor, actorPair, opponent, opponentPair, dist, round);
+            ApplyKnockback(r, actor, opponent, match.Board, round);
+            ApplyPull(r, actor, opponent, match.Board, round);
+            if (r.Landed)
+            {
+                actor.Definition.Persona.OnLandedHit(actor, opponent, actorPair, r, round, match, actor.PersonaState);
+                opponent.Definition.Persona.OnLandedHit(actor, opponent, actorPair, r, round, match, opponent.PersonaState);
+            }
+            newResult = r;
+        }
+
+        // 3. Post-attack repositioning (uses the freshest known attack result)
+        var effectiveResult = newResult ?? cachedAttackResult;
+        if (actorPair.PostMovementPhase == phase && effectiveResult.HasValue)
+            ApplyAttackerPostMove(effectiveResult.Value, actor, actorPair, opponent, match.Board, round);
+
+        return newResult ?? cachedAttackResult;
+    }
+
+    /// <summary>
+    /// Executes the generic card's movement. Caller must verify GenericMovementPhase matches
+    /// the current phase before calling.
+    /// </summary>
+    private static void ExecuteGenericMove(
+        FighterInstance mover,
+        CardPair pair,
+        FighterInstance opponent,
+        MatchState match,
+        RoundState round,
+        HexCoord? chosenDest)
+    {
+        int maxMovement = pair.Generic != null ? mover.GetCardMovement(pair.Generic) : 0;
+        if (maxMovement <= 0 || pair.CombinedMovementType == MovementType.None) return;
+
+        var moverPos = new HexCoord(mover.HexQ, mover.HexR);
+        var oppPos   = new HexCoord(opponent.HexQ, opponent.HexR);
+        match.Board.SetOccupied(oppPos, true);
+        var newPos = MovementEngine.ResolveMovement(mover, pair, moverPos, oppPos, match.Board, chosenDest);
+        match.Board.SetOccupied(oppPos, false);
+        mover.HexQ = newPos.Q; mover.HexR = newPos.R;
+        int dist = newPos.DistanceTo(oppPos);
+        round.Log.Add($"{mover.DisplayName} moves to {newPos} (dist={dist}).");
+    }
+
+    /// <summary>
+    /// Applies post-attack repositioning for the attacker after their attack resolves.
+    /// Handles: unique/special card post-movement, plus Recoil/FollowThrough/Disengage keywords.
+    /// Post-movement is always auto-resolved — no player destination choice.
+    /// </summary>
+    private static void ApplyAttackerPostMove(
+        AttackEngine.AttackResult result,
+        FighterInstance attacker,
+        CardPair attackerPair,
+        FighterInstance defender,
+        HexBoard board,
+        RoundState round)
+    {
+        var attackerPos = new HexCoord(attacker.HexQ, attacker.HexR);
+        var defenderPos = new HexCoord(defender.HexQ, defender.HexR);
+
+        // 1. Card-field post-movement (unique/special card owns the post-attack phase)
+        if (attackerPair.PostMovementMax > 0 && attackerPair.PostMovementType != MovementType.None)
+        {
+            board.SetOccupied(defenderPos, true);
+            var newPos = MovementEngine.ResolvePostMovement(attacker, attackerPair, attackerPos, defenderPos, board);
+            board.SetOccupied(defenderPos, false);
+            if (newPos != attackerPos)
+            {
+                attacker.HexQ = newPos.Q; attacker.HexR = newPos.R;
+                round.Log.Add($"  {attacker.DisplayName} repositions after attack (to {newPos}).");
+                attackerPos = newPos;
+                defenderPos = new HexCoord(defender.HexQ, defender.HexR); // refresh in case defender moved
+            }
+        }
+
+        // Collect keywords for keyword-driven post-move effects
+        var atkKeywords = new List<CardKeywordValue>();
+        if (attackerPair.Generic != null) atkKeywords.AddRange(attacker.GetCardKeywords(attackerPair.Generic));
+        if (attackerPair.Unique  != null) atkKeywords.AddRange(attacker.GetCardKeywords(attackerPair.Unique));
+        if (attackerPair.Special != null) atkKeywords.AddRange(attacker.GetCardKeywords(attackerPair.Special));
+
+        // 2. Recoil: retreat N hexes after attack regardless of outcome
+        if (atkKeywords.ContainsKeyword(CardKeyword.Recoil))
+        {
+            int n = atkKeywords.GetKeywordValue(CardKeyword.Recoil);
+            defenderPos = new HexCoord(defender.HexQ, defender.HexR);
+            board.SetOccupied(defenderPos, true);
+            var recoilPos = MovementEngine.ApplyDirectionalMove(n, MovementType.Retreat, attackerPos, defenderPos, board);
+            board.SetOccupied(defenderPos, false);
+            if (recoilPos != attackerPos)
+            {
+                attacker.HexQ = recoilPos.Q; attacker.HexR = recoilPos.R;
+                round.Log.Add($"  {attacker.DisplayName} recoils {n} hex(es) back!");
+                attackerPos = recoilPos;
+            }
+        }
+
+        // 3. FollowThrough: advance N toward opponent, but only on a landed hit
+        if (result.Landed && atkKeywords.ContainsKeyword(CardKeyword.FollowThrough))
+        {
+            int n = atkKeywords.GetKeywordValue(CardKeyword.FollowThrough);
+            defenderPos = new HexCoord(defender.HexQ, defender.HexR);
+            board.SetOccupied(defenderPos, true);
+            var followPos = MovementEngine.ApplyDirectionalMove(n, MovementType.Approach, attackerPos, defenderPos, board);
+            board.SetOccupied(defenderPos, false);
+            if (followPos != attackerPos)
+            {
+                attacker.HexQ = followPos.Q; attacker.HexR = followPos.R;
+                round.Log.Add($"  {attacker.DisplayName} follows through! (to {followPos})");
+                attackerPos = followPos;
+            }
+        }
+
+        // 4. Disengage: retreat N when attack was out of range (couldn't land)
+        if (!result.InRange && atkKeywords.ContainsKeyword(CardKeyword.Disengage))
+        {
+            int n = atkKeywords.GetKeywordValue(CardKeyword.Disengage);
+            defenderPos = new HexCoord(defender.HexQ, defender.HexR);
+            board.SetOccupied(defenderPos, true);
+            var disengagePos = MovementEngine.ApplyDirectionalMove(n, MovementType.Retreat, attackerPos, defenderPos, board);
+            board.SetOccupied(defenderPos, false);
+            if (disengagePos != attackerPos)
+            {
+                attacker.HexQ = disengagePos.Q; attacker.HexR = disengagePos.R;
+                round.Log.Add($"  {attacker.DisplayName} disengages safely.");
+            }
         }
     }
 

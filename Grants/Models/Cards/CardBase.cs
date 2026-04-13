@@ -28,6 +28,20 @@ public enum RangeBracket
 }
 
 /// <summary>
+/// The phase of a round in which a card action fires.
+/// GenericCard movement defaults to Beginning.
+/// UniqueCard/SpecialCard attack defaults to Main; post-attack reposition defaults to Finish.
+/// </summary>
+public enum TurnPhase
+{
+    Start,       // Pre-round housekeeping (stage/persona choices, before card selection)
+    Beginning,   // First action phase — typically pre-attack movement
+    Main,        // Second action phase — typically the attack
+    Finish,      // Third action phase — typically post-attack repositioning
+    End,         // Post-round housekeeping (cooldowns, bleed, KO check)
+}
+
+/// <summary>
 /// Defines how the movement on a card is applied relative to the opponent.
 /// </summary>
 public enum MovementType
@@ -64,6 +78,12 @@ public abstract class CardBase
 
     // Cooldown (base — upgrades can reduce)
     public int BaseCooldown { get; set; }
+
+    /// <summary>
+    /// Phase in which this card's movement action fires.
+    /// GenericCard default: Beginning. UniqueCard/SpecialCard movement uses PostMovementPhase instead.
+    /// </summary>
+    public TurnPhase MovementPhase { get; set; } = TurnPhase.Beginning;
 
     // Upgrade slots — each slot holds the chosen upgrade once applied
     public UpgradeSlot SlotOne { get; set; } = new();

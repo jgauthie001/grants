@@ -1,96 +1,94 @@
-using Grants.Models.Cards;
-using Grants.Models.Fighter;
+﻿using Grants.Models.Cards;
 
 namespace Grants.Models.Upgrades;
 
-public enum UpgradeNodeType
+/// <summary>
+/// Types of upgrade that can be applied to a card slot.
+/// </summary>
+public enum SlotUpgradeType
 {
-    /// <summary>Upgrades one stat slot on a specific card.</summary>
-    CardSlot,
-
-    /// <summary>A passive item effect (not tied to a card).</summary>
-    Item,
-
-    /// <summary>One of the 4 defining final nodes. Unlocked last, gated by branch completion.</summary>
-    FinalNode,
+    PowerBonus,
+    DefenseBonus,
+    SpeedBonus,
+    MovementBonus,
+    CooldownReduction,
+    RangeExtension,
+    AddKeyword,
+    PersonaUnlock,  // Grants a named string flag personas can query
 }
 
 /// <summary>
-/// A single node in a fighter's upgrade tree.
+/// The mastery condition type that governs when Slot 3 unlocks.
 /// </summary>
-public class UpgradeNode
+public enum MasteryConditionType
 {
-    public string Id { get; init; } = string.Empty;
+    /// <summary>Card played in N distinct matches.</summary>
+    PlayedInMatches,
+    /// <summary>Attack with this card landed N times (any match).</summary>
+    LandedHits,
+    /// <summary>Attack with this card landed against a faster opponent N times.</summary>
+    LandedVsFaster,
+    /// <summary>Attack with this card landed from >= MinDistance hexes N times.</summary>
+    LandedAtRange,
+    /// <summary>A specific named event counter reaches N (e.g. FollowThrough, Recoil).</summary>
+    EventCounter,
+    /// <summary>Won a match in which this card was played at least once.</summary>
+    WonMatchWithCard,
+    /// <summary>Won a match in which this card was the killing blow.</summary>
+    WonWithKillingBlow,
+}
+
+/// <summary>
+/// Describes the mastery condition that must be met to unlock Slot 3.
+/// </summary>
+public class MasteryCondition
+{
+    public MasteryConditionType Type { get; init; }
+
+    /// <summary>Target count to reach (e.g. 8 landed hits).</summary>
+    public int Target { get; init; } = 1;
+
+    /// <summary>For LandedAtRange: required minimum distance to count.</summary>
+    public int MinDistance { get; init; } = 0;
+
+    /// <summary>For EventCounter: the named counter key in FighterProgress.</summary>
+    public string? CounterKey { get; init; }
+
+    /// <summary>Human-readable description shown in the UI.</summary>
+    public string Description { get; init; } = string.Empty;
+}
+
+/// <summary>
+/// One unlock slot definition for a specific card.
+/// Cards have 3 slots each: Slot 1 (easy breadth), Slot 2 (moderate), Slot 3 (mastery).
+/// </summary>
+public class CardUpgradeSlotDef
+{
+    /// <summary>The card this slot belongs to (by card Id).</summary>
+    public string CardId { get; init; } = string.Empty;
+
+    /// <summary>0 = Slot 1, 1 = Slot 2, 2 = Slot 3.</summary>
+    public int SlotIndex { get; init; }
+
     public string Name { get; init; } = string.Empty;
     public string Description { get; init; } = string.Empty;
-    public UpgradeNodeType NodeType { get; init; }
 
-    /// <summary>Upgrade point cost to unlock this node.</summary>
-    public int Cost { get; init; } = 1;
+    // --- What this slot unlocks ---
+    public SlotUpgradeType UpgradeType { get; init; }
+    public int StatBonus { get; init; } = 0;
+    public int CooldownReduction { get; init; } = 0;
+    public CardKeyword KeywordAdded { get; init; } = CardKeyword.None;
+    public int KeywordValue { get; init; } = 1;
+    public string? PersonaUnlockId { get; init; }
 
-    /// <summary>Power rating contribution (for PvP matchmaking).</summary>
-    public int PowerRatingValue { get; init; } = 1;
+    // --- Unlock gate ---
+    // Slots 1 and 2 use DistinctMatchesRequired + breadth check.
+    // Slot 3 uses MasteryCondition.
+    public int DistinctMatchesRequired { get; init; } = 0;   // For slots 1 & 2
+    public int BreadthRequired { get; init; } = 0;           // Minimum distinct cards played in that match
+    public MasteryCondition? Mastery { get; init; }          // Slot 3 only
 
-    /// <summary>IDs of nodes that must be unlocked before this one is available.</summary>
-    public List<string> Prerequisites { get; init; } = new();
-
-    // --- For CardSlot nodes ---
-    /// <summary>Which card this node upgrades (by card Id).</summary>
-    public string? TargetCardId { get; init; }
-    public int SlotIndex { get; init; } = 0; // 0 = slot one, 1 = slot two
-
-    /// <summary>The upgrade to apply to the card slot.</summary>
-    public UpgradeSlot? UpgradeEffect { get; init; }
-
-    // --- For Item nodes ---
-    /// <summary>Unique item id. Applied to FighterInstance.ActiveItemIds when unlocked.</summary>
-    public string? ItemId { get; init; }
-    public ItemEffect? ItemEffect { get; init; }
-
-    // --- For FinalNode ---
-    /// <summary>Description of the defining passive effect.</summary>
-    public FinalNodeEffect? FinalEffect { get; init; }
-
-    /// <summary>Which branch (by name) this node belongs to — for tree layout.</summary>
-    public string Branch { get; init; } = string.Empty;
+    /// <summary>Unique slot identifier: cardId + ":" + slotIndex.</summary>
+    public string SlotId => $"{CardId}:{SlotIndex}";
 }
 
-/// <summary>Passive item effects that apply during a match if the item is unlocked.</summary>
-public class ItemEffect
-{
-    /// <summary>If set, this body location cannot exceed this damage state.</summary>
-    public BodyLocation? DamageCapLocation { get; init; }
-    public DamageState? DamageCap { get; init; }
-
-    /// <summary>Flat power bonus to all cards that use a specific body tag.</summary>
-    public string? BodyTagPowerBonus { get; init; }
-    public int BodyTagPowerValue { get; init; }
-
-    /// <summary>Speed modifier on all cards of a specific body tag.</summary>
-    public string? BodyTagSpeedBonus { get; init; }
-    public int BodyTagSpeedValue { get; init; }
-
-    /// <summary>Triggered effect: on first Injured location per match, apply a temporary speed boost.</summary>
-    public bool AdrenalineOnFirstInjury { get; init; }
-    public int AdrenalineSpeedBonus { get; init; }
-    public int AdrenalineTurns { get; init; }
-}
-
-/// <summary>Defines a final node's passive/structural effect.</summary>
-public class FinalNodeEffect
-{
-    /// <summary>Free-text description used in UI. Logic is applied via FighterInstance item system.</summary>
-    public string FlavorDescription { get; init; } = string.Empty;
-
-    /// <summary>Item-level effect this final node grants.</summary>
-    public ItemEffect? Effect { get; init; }
-
-    /// <summary>Cooldown reduction to apply to specials.</summary>
-    public int SpecialCooldownReduction { get; init; } = 0;
-
-    /// <summary>After winning a speed duel (faster hit lands), refund cooldown on generics.</summary>
-    public bool MovementCooldownRefundOnSpeedWin { get; init; } = false;
-
-    /// <summary>On simultaneous hit that YOU win power on: apply half damage to a second location.</summary>
-    public bool SplashDamageOnSimultaneousPowerWin { get; init; } = false;
-}

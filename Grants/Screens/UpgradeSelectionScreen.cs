@@ -8,9 +8,9 @@ using Grants.Models.Upgrades;
 namespace Grants.Screens;
 
 /// <summary>
-/// Post-match upgrade selection screen. Player spends earned upgrade points
-/// to unlock nodes from the upgrade tree.
-/// Data: (fighterId: string, pointsEarned: int)
+/// Shows upgrade slots newly unlocked after a match, plus progress toward
+/// upcoming unlocks.
+/// Data: (fighterId: string, newlyUnlocked: List&lt;string&gt;)
 /// </summary>
 public class UpgradeSelectionScreen : GameScreen
 {
@@ -19,258 +19,272 @@ public class UpgradeSelectionScreen : GameScreen
     private Texture2D _pixel = null!;
 
     private string _fighterId = string.Empty;
-    private int _pointsEarned = 0;
-    private UpgradeTree _tree = null!;
+    private List<string> _newlyUnlocked = new();
+    private FighterUpgradeDef _upgradeDef = null!;
     private FighterProgress _progress = null!;
 
-    // Navigation: list of available node IDs
-    private List<string> _availableNodeIds = new();
+    // "Coming soon" slots: locked slots closest to unlocking
+    private List<CardUpgradeSlotDef> _nearSlots = new();
     private int _selectedIndex = 0;
+    private bool _browsingNear = false;
     private KeyboardState _prevKeys;
 
     public override void OnEnter(object? data = null)
     {
         _font = Game.DefaultFont;
         _smallFont = Game.SmallFont;
-        _prevKeys = Keyboard.GetState();
         _pixel = Game.Pixel;
+        _prevKeys = Keyboard.GetState();
 
-        var (fighterId, pointsEarned) = ((string, int))data!;
-        _fighterId = fighterId;
-        _pointsEarned = pointsEarned;
-
+        (_fighterId, _newlyUnlocked) = ((string, List<string>))data!;
         _progress = Game.PlayerProfile.GetOrCreateProgress(_fighterId);
-        _tree = GrantsUpgradeTree.Create(); // TODO: look up tree by fighter ID
 
-        // Build list of available upgrades (not already unlocked, and prerequisites met)
-        _availableNodeIds.Clear();
-        foreach (var (nodeId, node) in _tree.Nodes)
-        {
-            if (!_progress.UnlockedNodes.Contains(nodeId) && _tree.IsAvailable(nodeId, _progress))
-            {
-                _availableNodeIds.Add(nodeId);
-            }
-        }
+        // TODO: look up upgradeDef by fighter ID when more fighters are added
+        _upgradeDef = GrantsUpgrades.Create();
 
-        // Sort by cost for logical progression
-        _availableNodeIds.Sort((a, b) => 
-            (_tree.GetNode(a)?.Cost ?? 0).CompareTo(_tree.GetNode(b)?.Cost ?? 0));
+        // Build list of near-unlock slots (slots 0 and 1 only, locked, closest to unlock)
+        _nearSlots = _upgradeDef.Slots.Values
+            .Where(s => s.Mastery == null && !_progress.IsSlotUnlocked(s.SlotId))
+            .OrderBy(s => s.DistinctMatchesRequired - _progress.CardDistinctMatches.GetValueOrDefault(s.CardId, 0))
+            .Take(8)
+            .ToList();
 
         _selectedIndex = 0;
+        _browsingNear = _newlyUnlocked.Count == 0;
     }
 
     public override void Update(GameTime gameTime)
     {
         var keys = Keyboard.GetState();
 
-        if (IsPressed(keys, _prevKeys, Keys.Up) || IsPressed(keys, _prevKeys, Keys.W))
-            _selectedIndex = (_selectedIndex - 1 + _availableNodeIds.Count) % _availableNodeIds.Count;
+        int listCount = _browsingNear ? _nearSlots.Count : _newlyUnlocked.Count;
 
-        if (IsPressed(keys, _prevKeys, Keys.Down) || IsPressed(keys, _prevKeys, Keys.S))
-            _selectedIndex = (_selectedIndex + 1) % _availableNodeIds.Count;
+        if (listCount > 0)
+        {
+            if (IsPressed(keys, _prevKeys, Keys.Up) || IsPressed(keys, _prevKeys, Keys.W))
+                _selectedIndex = (_selectedIndex - 1 + listCount) % listCount;
 
-        if (IsPressed(keys, _prevKeys, Keys.Enter) && _availableNodeIds.Count > 0)
-            TryUnlockSelected();
+            if (IsPressed(keys, _prevKeys, Keys.Down) || IsPressed(keys, _prevKeys, Keys.S))
+                _selectedIndex = (_selectedIndex + 1) % listCount;
+        }
 
-        if (IsPressed(keys, _prevKeys, Keys.D))
-            ReturnToMenu();
+        if (IsPressed(keys, _prevKeys, Keys.Tab))
+        {
+            _browsingNear = !_browsingNear;
+            _selectedIndex = 0;
+        }
 
-        if (IsPressed(keys, _prevKeys, Keys.Escape))
-            Game.Exit();
+        if (IsPressed(keys, _prevKeys, Keys.T))
+            SwitchTo(ScreenType.UpgradeTree, _fighterId);
+
+        if (IsPressed(keys, _prevKeys, Keys.D) || IsPressed(keys, _prevKeys, Keys.Enter) || IsPressed(keys, _prevKeys, Keys.Escape))
+            SwitchTo(ScreenType.MainMenu);
 
         _prevKeys = keys;
-    }
-
-    private void TryUnlockSelected()
-    {
-        if (_selectedIndex < 0 || _selectedIndex >= _availableNodeIds.Count) return;
-
-        string nodeId = _availableNodeIds[_selectedIndex];
-        var node = _tree.GetNode(nodeId);
-        if (node == null) return;
-
-        if (_progress.TryUnlockNode(node))
-        {
-            UpgradeEngine.SaveProfile(Game.PlayerProfile);
-            // Remove from available list after unlocking
-            _availableNodeIds.Remove(nodeId);
-            _selectedIndex = Math.Min(_selectedIndex, Math.Max(0, _availableNodeIds.Count - 1));
-        }
-    }
-
-    private void ReturnToMenu()
-    {
-        SwitchTo(ScreenType.MainMenu);
     }
 
     public override void Draw(GameTime gameTime, SpriteBatch sb)
     {
         sb.Begin();
 
-        DrawHeader(sb);
-        DrawUpgradeList(sb);
-        DrawNodeDetail(sb);
-        DrawFooter(sb);
+        int vw = Game.GraphicsDevice.Viewport.Width;
+
+        DrawHeader(sb, vw);
+        DrawUnlockedPanel(sb);
+        DrawNearPanel(sb, vw);
+        DrawFooter(sb, vw);
 
         sb.End();
     }
 
-    private void DrawHeader(SpriteBatch sb)
+    private void DrawHeader(SpriteBatch sb, int vw)
     {
-        sb.DrawString(_font, "Upgrades Earned!_pl", new Vector2(20, 15), Color.LimeGreen);
-        
-        string earningsInfo = $"Earned {_pointsEarned} points | Available: {_progress.AvailablePoints} | Spent: {_progress.SpentPoints} | Total wins: {_progress.TotalWins}";
-        sb.DrawString(_smallFont, earningsInfo, new Vector2(20, 50), Color.LightGray);
+        string title = _newlyUnlocked.Count > 0 ? "Upgrades Unlocked!" : "Match Progress";
+        Color titleColor = _newlyUnlocked.Count > 0 ? Color.LimeGreen : Color.LightGray;
+        var titleSz = _font.MeasureString(title);
+        sb.DrawString(_font, title, new Vector2((vw - titleSz.X) / 2, 15), titleColor);
 
-        if (_availableNodeIds.Count == 0)
-        {
-            sb.DrawString(_smallFont, "No upgrades available right now.", new Vector2(20, 75), Color.Yellow);
-        }
+        int unlockedTotal = _progress.UnlockedSlots.Count;
+        int totalSlots = _upgradeDef.Slots.Count;
+        string statLine = $"Total wins: {_progress.TotalWins}   Slots unlocked: {unlockedTotal} / {totalSlots}";
+        var statSz = _smallFont.MeasureString(statLine);
+        sb.DrawString(_smallFont, statLine, new Vector2((vw - statSz.X) / 2, 48), Color.LightGray);
     }
 
-    private void DrawUpgradeList(SpriteBatch sb)
+    private void DrawUnlockedPanel(SpriteBatch sb)
     {
-        int x = 20, y = 100;
-        int maxItems = 12;
+        int x = 20, y = 80;
 
-        sb.DrawString(_smallFont, "Available Upgrades:", new Vector2(x, y - 20), Color.White);
+        string header = _newlyUnlocked.Count > 0
+            ? $"Newly Unlocked ({_newlyUnlocked.Count}):"
+            : "Nothing new unlocked.";
+        Color headerColor = _newlyUnlocked.Count > 0 ? Color.Gold : Color.DimGray;
 
-        for (int i = 0; i < Math.Min(_availableNodeIds.Count, maxItems); i++)
+        bool isActive = !_browsingNear;
+        sb.DrawString(_smallFont, header, new Vector2(x, y), isActive ? headerColor : Color.DimGray * 0.7f);
+        y += 20;
+
+        for (int i = 0; i < _newlyUnlocked.Count; i++)
         {
-            string nodeId = _availableNodeIds[i];
-            var node = _tree.GetNode(nodeId);
-            if (node == null) continue;
+            var slot = _upgradeDef.GetSlot(_newlyUnlocked[i]);
+            if (slot == null) continue;
 
-            bool selected = i == _selectedIndex;
-            Color color = selected ? Color.Yellow : Color.LightGray;
-
+            bool selected = isActive && i == _selectedIndex;
+            Color c = selected ? Color.Yellow : Color.LimeGreen;
             string prefix = selected ? "> " : "  ";
-            string cost = $"[{node.Cost}pt]";
-            string label = $"{prefix}{node.Name,-25} {cost,-8} +{node.PowerRatingValue}pwr";
-
-            sb.DrawString(_smallFont, label, new Vector2(x, y), color);
+            string tier = slot.SlotIndex == 2 ? "[Mastery]" : $"[Slot {slot.SlotIndex + 1}]";
+            string shortId = slot.CardId.Replace(_fighterId + "_", "").ToUpper();
+            string label = $"{prefix}{tier} {S(slot.Name)} - {shortId}";
+            sb.DrawString(_smallFont, label, new Vector2(x, y), c);
 
             if (selected)
-                sb.Draw(_pixel, new Rectangle(x, y, 4, 14), Color.Yellow);
+                DrawSlotDetail(sb, slot, x + 320, 80);
 
             y += 18;
         }
 
-        if (_availableNodeIds.Count > maxItems)
+        if (_newlyUnlocked.Count == 0)
+            sb.DrawString(_smallFont, "  Keep playing to earn upgrades.", new Vector2(x, y), Color.DimGray);
+    }
+
+    private void DrawNearPanel(SpriteBatch sb, int vw)
+    {
+        int x = 20, y = 320;
+
+        bool isActive = _browsingNear;
+        sb.DrawString(_smallFont, "Upcoming Unlocks:", new Vector2(x, y), isActive ? Color.White : Color.DimGray * 0.7f);
+        y += 20;
+
+        for (int i = 0; i < _nearSlots.Count; i++)
         {
-            sb.DrawString(_smallFont, $"... and {_availableNodeIds.Count - maxItems} more", new Vector2(x, y), Color.DimGray);
+            var slot = _nearSlots[i];
+            bool selected = isActive && i == _selectedIndex;
+            Color c = selected ? Color.Yellow : Color.LightGray;
+            string prefix = selected ? "> " : "  ";
+
+            int played = _progress.CardDistinctMatches.GetValueOrDefault(slot.CardId, 0);
+            string shortId = slot.CardId.Replace(_fighterId + "_", "").ToUpper();
+            string label = $"{prefix}[Slot {slot.SlotIndex + 1}] {S(slot.Name)} ({shortId}) - {played}/{slot.DistinctMatchesRequired}";
+            sb.DrawString(_smallFont, label, new Vector2(x, y), played >= slot.DistinctMatchesRequired ? Color.LimeGreen : c);
+
+            if (selected)
+                DrawSlotDetail(sb, slot, x + 320, 320);
+
+            y += 18;
         }
     }
 
-    private void DrawNodeDetail(SpriteBatch sb)
+    private void DrawSlotDetail(SpriteBatch sb, CardUpgradeSlotDef slot, int dx, int dy)
     {
-        if (_availableNodeIds.Count == 0) return;
+        sb.Draw(_pixel, new Rectangle(dx - 8, dy - 8, 400, 220), Color.DarkSlateGray * 0.6f);
+        DrawRect(sb, dx - 8, dy - 8, 400, 220, Color.CornflowerBlue);
 
-        var node = _tree.GetNode(_availableNodeIds[_selectedIndex]);
-        if (node == null) return;
-
-        int dx = 420, dy = 100;
-
-        // Panel background
-        sb.Draw(_pixel, new Rectangle(dx - 10, dy - 10, 420, 350), Color.DarkSlateGray * 0.6f);
-        DrawRect(sb, dx - 10, dy - 10, 420, 350, Color.Gold);
-
-        // Title and cost
-        sb.DrawString(_font, node.Name, new Vector2(dx, dy), Color.LimeGreen);
+        sb.DrawString(_font, S(slot.Name), new Vector2(dx, dy), Color.LimeGreen);
         dy += 24;
 
-        string costLine = $"Cost: {node.Cost} points | Power: +{node.PowerRatingValue}";
-        sb.DrawString(_smallFont, costLine, new Vector2(dx, dy), 
-            _progress.AvailablePoints >= node.Cost ? Color.LimeGreen : Color.Red);
-        dy += 20;
-
-        string safeBranch = SanitizeText(node.Branch);
-        sb.DrawString(_smallFont, $"Branch: {safeBranch}", new Vector2(dx, dy), Color.LightGray);
+        string typeStr = slot.UpgradeType switch
+        {
+            SlotUpgradeType.PowerBonus        => $"+{slot.StatBonus} Power",
+            SlotUpgradeType.DefenseBonus      => $"+{slot.StatBonus} Defense",
+            SlotUpgradeType.SpeedBonus        => $"+{slot.StatBonus} Speed",
+            SlotUpgradeType.MovementBonus     => $"+{slot.StatBonus} Movement",
+            SlotUpgradeType.CooldownReduction => $"-{slot.CooldownReduction} Cooldown",
+            SlotUpgradeType.RangeExtension    => $"+{slot.StatBonus} Range",
+            SlotUpgradeType.AddKeyword        => $"Keyword: {slot.KeywordAdded} ({slot.KeywordValue})",
+            SlotUpgradeType.PersonaUnlock     => $"Passive: {slot.PersonaUnlockId}",
+            _ => slot.UpgradeType.ToString(),
+        };
+        sb.DrawString(_smallFont, typeStr, new Vector2(dx, dy), Color.Gold);
         dy += 18;
 
-        // Prerequisites
-        if (node.Prerequisites.Count > 0)
+        // Unlock condition
+        if (slot.Mastery != null)
         {
-            sb.DrawString(_smallFont, $"Requires: {string.Join(", ", node.Prerequisites)}", 
-                new Vector2(dx, dy), Color.Orange);
+            int cur = GetMasteryProgress(slot);
+            sb.DrawString(_smallFont, $"Mastery: {S(slot.Mastery.Description)}", new Vector2(dx, dy), Color.Orange);
             dy += 18;
-        }
-
-        dy += 8;
-
-        // Description - sanitize for font compatibility
-        string safeDescription = SanitizeText(node.Description);
-        var words = safeDescription.Split(' ');
-        string line = "";
-        foreach (var word in words)
-        {
-            if ((line + word).Length > 50 && line.Length > 0)
-            {
-                sb.DrawString(_smallFont, line.TrimEnd(), new Vector2(dx, dy), Color.LightCyan);
-                dy += 15;
-                line = word + " ";
-            }
-            else
-            {
-                line += word + " ";
-            }
-        }
-        if (line.Length > 0)
-        {
-            sb.DrawString(_smallFont, line.TrimEnd(), new Vector2(dx, dy), Color.LightCyan);
-            dy += 15;
-        }
-
-        dy += 12;
-
-        // Action prompt
-        if (_progress.AvailablePoints >= node.Cost)
-        {
-            sb.DrawString(_smallFont, "[Enter] Unlock this upgrade", new Vector2(dx, dy), Color.Yellow);
+            sb.DrawString(_smallFont, $"Progress: {cur} / {slot.Mastery.Target}", new Vector2(dx, dy), Color.LightGray);
         }
         else
         {
-            int needed = node.Cost - _progress.AvailablePoints;
-            sb.DrawString(_smallFont, $"Need {needed} more points", new Vector2(dx, dy), Color.Red);
+            int played = _progress.CardDistinctMatches.GetValueOrDefault(slot.CardId, 0);
+            sb.DrawString(_smallFont, $"Unlocks after {slot.DistinctMatchesRequired} matches with this card.", new Vector2(dx, dy), Color.LightGray);
+            dy += 18;
+            sb.DrawString(_smallFont, $"Progress: {played} / {slot.DistinctMatchesRequired}", new Vector2(dx, dy), Color.LightGray);
         }
+
+        dy += 24;
+        WordWrap(sb, S(slot.Description), dx, dy, 360, Color.LightCyan);
     }
 
-    private void DrawFooter(SpriteBatch sb)
+    private int GetMasteryProgress(CardUpgradeSlotDef slot)
+    {
+        if (slot.Mastery == null) return 0;
+        return slot.Mastery.Type switch
+        {
+            MasteryConditionType.PlayedInMatches    => _progress.CardDistinctMatches.GetValueOrDefault(slot.CardId, 0),
+            MasteryConditionType.LandedHits         => _progress.CardLandedHits.GetValueOrDefault(slot.CardId, 0),
+            MasteryConditionType.LandedVsFaster     => _progress.CardLandedVsFaster.GetValueOrDefault(slot.CardId, 0),
+            MasteryConditionType.LandedAtRange      => _progress.CardLandedAtRange.GetValueOrDefault(slot.CardId, 0),
+            MasteryConditionType.EventCounter       => slot.Mastery.CounterKey != null
+                ? _progress.EventCounters.GetValueOrDefault(slot.Mastery.CounterKey, 0) : 0,
+            MasteryConditionType.WonMatchWithCard   => _progress.CardWinsWithCard.GetValueOrDefault(slot.CardId, 0),
+            MasteryConditionType.WonWithKillingBlow => _progress.CardKillingBlows.GetValueOrDefault(slot.CardId, 0),
+            _ => 0,
+        };
+    }
+
+    private void DrawFooter(SpriteBatch sb, int vw)
     {
         int vy = Game.GraphicsDevice.Viewport.Height;
-        string footer = "[Up/Down] Navigate | [Enter] Unlock | [D] Done | [Esc] Exit";
-        var footerSize = _smallFont.MeasureString(footer);
-        sb.DrawString(_smallFont, footer,
-            new Vector2((Game.GraphicsDevice.Viewport.Width - (int)footerSize.X) / 2, vy - 30),
-            Color.DimGray);
+        string footer = "[Up/Down] Browse | [Tab] Switch Panel | [T] Full Tree | [Enter/D/Esc] Done";
+        var sz = _smallFont.MeasureString(footer);
+        sb.DrawString(_smallFont, footer, new Vector2((vw - sz.X) / 2, vy - 30), Color.DimGray);
     }
 
-    private void DrawRect(SpriteBatch sb, int x, int y, int width, int height, Color color)
+    private void WordWrap(SpriteBatch sb, string text, int x, int y, int maxWidth, Color color)
     {
-        sb.Draw(_pixel, new Rectangle(x, y, width, 1), color);                    // Top
-        sb.Draw(_pixel, new Rectangle(x, y + height - 1, width, 1), color);        // Bottom
-        sb.Draw(_pixel, new Rectangle(x, y, 1, height), color);                   // Left
-        sb.Draw(_pixel, new Rectangle(x + width - 1, y, 1, height), color);        // Right
+        var words = text.Split(' ');
+        string line = "";
+        foreach (var word in words)
+        {
+            string test = line.Length > 0 ? line + " " + word : word;
+            if (_smallFont.MeasureString(test).X > maxWidth && line.Length > 0)
+            {
+                sb.DrawString(_smallFont, line, new Vector2(x, y), color);
+                y += 15;
+                line = word;
+            }
+            else
+            {
+                line = test;
+            }
+        }
+        if (line.Length > 0)
+            sb.DrawString(_smallFont, line, new Vector2(x, y), color);
+    }
+
+    private void DrawRect(SpriteBatch sb, int x, int y, int w, int h, Color color)
+    {
+        sb.Draw(_pixel, new Rectangle(x, y, w, 1), color);
+        sb.Draw(_pixel, new Rectangle(x, y + h - 1, w, 1), color);
+        sb.Draw(_pixel, new Rectangle(x, y, 1, h), color);
+        sb.Draw(_pixel, new Rectangle(x + w - 1, y, 1, h), color);
     }
 
     private static bool IsPressed(KeyboardState cur, KeyboardState prev, Keys key) =>
         cur.IsKeyDown(key) && prev.IsKeyUp(key);
 
-    private string SanitizeText(string text)
+    private static string S(string? text)
     {
-        // Replace problematic Unicode characters with ASCII equivalents
-        var filtered = new System.Text.StringBuilder();
+        if (text == null) return "";
+        var buf = new System.Text.StringBuilder(text.Length);
         foreach (char c in text)
         {
-            if (c >= 32 && c <= 126)  // Printable ASCII range
-                filtered.Append(c);
-            else if (c == '\n' || c == '\t')
-                filtered.Append(' ');  // Replace whitespace with space
-            else if (c == '–' || c == '—')  // Em-dash or en-dash
-                filtered.Append('-');
-            else if (c != '\0')  // Skip null characters but keep others if safe
-                filtered.Append('?');
+            if (c >= 32 && c <= 126) buf.Append(c);
+            else if (c == '\u2013' || c == '\u2014') buf.Append('-');
+            else if (c == '\n') buf.Append(' ');
         }
-        return filtered.ToString();
+        return buf.ToString();
     }
 }

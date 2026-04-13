@@ -30,9 +30,8 @@ public static class MovementEngine
         HexBoard board,
         HexCoord? chosenDestination = null)
     {
-        var movingCard = pair.Unique ?? (CardBase?)pair.Special;
-        int maxMovement = (pair.Generic != null ? mover.GetCardMovement(pair.Generic) : 0)
-            + (movingCard != null ? mover.GetCardMovement(movingCard) : 0);
+        // Pre-attack phase: generic card owns this movement.
+        int maxMovement = pair.Generic != null ? mover.GetCardMovement(pair.Generic) : 0;
         int minMovement = pair.EffectiveMinMovement;
 
         var movementType = pair.CombinedMovementType;
@@ -76,6 +75,52 @@ public static class MovementEngine
     }
 
     /// <summary>
+    /// Resolves post-attack repositioning for a fighter. Uses the unique/special card's
+    /// movement values. Always auto-resolved — no player destination pick.
+    /// Approach = move toward opponent; Retreat = move away; Free = auto-advance toward opponent.
+    /// </summary>
+    public static HexCoord ResolvePostMovement(
+        FighterInstance mover,
+        CardPair pair,
+        HexCoord currentPos,
+        HexCoord opponentPos,
+        HexBoard board)
+    {
+        var movingCard = pair.Unique ?? (CardBase?)pair.Special;
+        if (movingCard == null) return currentPos;
+
+        int maxMovement = mover.GetCardMovement(movingCard);
+        int minMovement = pair.PostMovementMin;
+        var movementType = pair.PostMovementType;
+
+        if (maxMovement <= 0 || movementType == MovementType.None) return currentPos;
+
+        bool approaching = movementType == MovementType.Approach;
+        // Free post-movement defaults to pressing toward opponent (no player input)
+        if (movementType == MovementType.Free)
+            return BestCandidate(currentPos, opponentPos, minMovement, maxMovement, approachTarget: true, board);
+
+        return BestCandidate(currentPos, opponentPos, minMovement, maxMovement, approaching, board);
+    }
+
+    /// <summary>
+    /// Moves a fighter directionally by up to N hexes (auto-resolved).
+    /// Used for keyword-driven post-attack effects: Recoil, FollowThrough, Disengage.
+    /// Caller is responsible for marking the opponent's hex occupied before calling.
+    /// </summary>
+    public static HexCoord ApplyDirectionalMove(
+        int maxSteps,
+        MovementType type,
+        HexCoord currentPos,
+        HexCoord opponentPos,
+        HexBoard board)
+    {
+        if (maxSteps <= 0 || type == MovementType.None) return currentPos;
+        bool approaching = type == MovementType.Approach;
+        return BestCandidate(currentPos, opponentPos, 0, maxSteps, approaching, board);
+    }
+
+    /// <summary>
     /// Picks the best hex within [minSteps, maxSteps] of origin.
     /// Closest to opponent if approaching, farthest if retreating.
     /// Falls back to any reachable hex if no hex satisfies the min constraint.
@@ -97,8 +142,8 @@ public static class MovementEngine
     }
 
     /// <summary>
-    /// Returns all hexes a fighter can legally reach given this pair's movement range and type.
-    /// Used by FightScreen to highlight valid destination choices.
+    /// Returns all hexes a fighter can legally reach for PRE-attack movement.
+    /// Uses the generic card's movement only. Used by FightScreen to highlight destinations.
     /// </summary>
     public static List<HexCoord> GetReachableHexes(
         FighterInstance mover,
@@ -107,9 +152,8 @@ public static class MovementEngine
         HexCoord opponentPos,
         HexBoard board)
     {
-        var movingCard2 = pair.Unique ?? (CardBase?)pair.Special;
-        int maxMovement = (pair.Generic != null ? mover.GetCardMovement(pair.Generic) : 0)
-            + (movingCard2 != null ? mover.GetCardMovement(movingCard2) : 0);
+        // Pre-attack phase: generic card only.
+        int maxMovement = pair.Generic != null ? mover.GetCardMovement(pair.Generic) : 0;
         int minMovement = pair.EffectiveMinMovement;
 
         var movementType = pair.CombinedMovementType;

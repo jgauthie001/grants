@@ -27,35 +27,50 @@ public class CardPair
     public int CombinedDefense =>
         (Generic?.BaseDefense ?? 0) + (Unique?.BaseDefense ?? Special?.BaseDefense ?? 0);
 
+    // ── Pre-attack movement (generic card) ──────────────────────────────────
+
     /// <summary>
-    /// Minimum hexes this action requires to move (0 = movement is optional).
-    /// Sums both cards' MinMovement values.
+    /// Minimum hexes the fighter must move before attacking (0 = optional).
+    /// Driven by the generic card only — generic owns the pre-attack phase.
     /// </summary>
     public int EffectiveMinMovement =>
-        Math.Max(0, (Generic?.MinMovement ?? 0) + (Unique?.MinMovement ?? Special?.MinMovement ?? 0));
+        Math.Max(0, Generic?.MinMovement ?? 0);
 
     /// <summary>
-    /// Maximum hexes this action can move (not accounting for per-fighter upgrade bonuses).
-    /// Sums both cards' MaxMovement values.
-    /// Use FighterInstance.GetCardMovement() when upgrade bonuses matter.
+    /// Maximum hexes the fighter can move before attacking.
+    /// Driven by the generic card only. Use FighterInstance.GetCardMovement() for upgrade bonuses.
     /// </summary>
     public int EffectiveMaxMovement =>
-        (Generic?.MaxMovement ?? 0) + (Unique?.MaxMovement ?? Special?.MaxMovement ?? 0);
+        Generic?.MaxMovement ?? 0;
 
     /// <summary>
-    /// Movement type for this pair. The unique/special card's type takes priority
-    /// (it defines the intent of the move — Approach/Retreat/Free). The generic
-    /// card's type is a fallback if the unique/special has None.
+    /// Movement direction for pre-attack movement. Taken from the generic card.
     /// </summary>
-    public MovementType CombinedMovementType
-    {
-        get
-        {
-            var primary = Unique?.BaseMovementType ?? Special?.BaseMovementType ?? MovementType.None;
-            if (primary != MovementType.None) return primary;
-            return Generic?.BaseMovementType ?? MovementType.None;
-        }
-    }
+    public MovementType CombinedMovementType =>
+        Generic?.BaseMovementType ?? MovementType.None;
+
+    // ── Post-attack movement (unique / special card) ─────────────────────────
+
+    /// <summary>
+    /// Minimum hexes the fighter must reposition after their attack (0 = optional).
+    /// Driven by the unique/special card — unique owns the post-attack phase.
+    /// </summary>
+    public int PostMovementMin =>
+        Math.Max(0, Unique?.MinMovement ?? Special?.MinMovement ?? 0);
+
+    /// <summary>
+    /// Maximum hexes the fighter can reposition after their attack.
+    /// Use FighterInstance.GetCardMovement() for upgrade bonuses.
+    /// Post-attack movement is always auto-resolved (no player destination pick).
+    /// </summary>
+    public int PostMovementMax =>
+        Unique?.MaxMovement ?? Special?.MaxMovement ?? 0;
+
+    /// <summary>
+    /// Movement direction for post-attack repositioning.
+    /// </summary>
+    public MovementType PostMovementType =>
+        Unique?.BaseMovementType ?? Special?.BaseMovementType ?? MovementType.None;
 
     /// <summary>
     /// Minimum range (in hexes) this pair can hit.
@@ -102,6 +117,17 @@ public class CardPair
 
     /// <summary>For display purposes: show range as a bracket string.</summary>
     public string RangeDisplay => $"{EffectiveMinRange}-{EffectiveMaxRange}";
+
+    // ── Phase accessors ─────────────────────────────────────────────────────
+
+    /// <summary>Phase in which the generic card's movement fires. Default: Beginning.</summary>
+    public TurnPhase GenericMovementPhase => Generic?.MovementPhase ?? TurnPhase.Beginning;
+
+    /// <summary>Phase in which this pair's attack fires. Default: Main.</summary>
+    public TurnPhase AttackPhase => Unique?.AttackPhase ?? Special?.AttackPhase ?? TurnPhase.Main;
+
+    /// <summary>Phase in which this pair's post-attack repositioning fires. Default: Finish.</summary>
+    public TurnPhase PostMovementPhase => Unique?.PostMovementPhase ?? Special?.PostMovementPhase ?? TurnPhase.Finish;
 
     /// <summary>All keywords from both cards combined.</summary>
     public IEnumerable<CardKeywordValue> AllKeywords =>

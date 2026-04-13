@@ -34,6 +34,11 @@ public enum CardKeyword
     Press,          // After landing hit: may move 1 hex toward opponent as free action
     Retreat,        // Movement cannot be prevented this turn
 
+    // Post-attack movement (attacker repositions after their own attack)
+    Recoil,         // Attacker retreats N hexes after their attack regardless of outcome
+    FollowThrough,  // Attacker advances N hexes toward opponent, but only on a landed hit
+    Disengage,      // Attacker retreats N hexes when their attack is out of range or misses
+
     // Debug/Testing
     Kill,           // Instantly disables all opponent body parts (TEST ONLY)
 

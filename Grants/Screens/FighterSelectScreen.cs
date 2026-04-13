@@ -3,7 +3,11 @@ using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Input;
 using Grants.Fighters.Chivalrous;
 using Grants.Fighters.Cursed;
+using Grants.Fighters.Evolutionary;
 using Grants.Fighters.Grants;
+using Grants.Fighters.AdaptiveRobot;
+using Grants.Fighters.Mutator;
+using Grants.Fighters.RevenantWitch;
 using Grants.Models.Fighter;
 
 namespace Grants.Screens;
@@ -45,6 +49,10 @@ public class FighterSelectScreen : GameScreen
             CatalystFighter.CreateDefinition(),
             ChivalrousFighter.CreateDefinition(),
             HonourDebtFighter.CreateDefinition(),
+            MutatorFighter.CreateDefinition(),
+            EvolutionaryFighter.CreateDefinition(),
+            AdaptiveRobotFighter.CreateDefinition(),
+            RevenantWitchFighter.CreateDefinition(),
         };
     }
 
@@ -112,7 +120,7 @@ public class FighterSelectScreen : GameScreen
             string prefix = sel ? "> " : "  ";
             string rankStr = _matchType == "pvp_ranked"
                 ? (prog.IsRankedUnlocked ? "[Ranked Unlocked]" : $"[{prog.TotalWins}/15 wins]")
-                : $"[{prog.TotalWins} wins | PR: {prog.PowerRating}]";
+                : $"[{prog.TotalWins} wins | S:{prog.UnlockedSlots.Count} slots]";    
 
             sb.DrawString(_font, $"{prefix}{f.Name}", new Vector2(200, 160 + i * 60), nameColor);
             sb.DrawString(_smallFont, rankStr, new Vector2(450, 168 + i * 60),

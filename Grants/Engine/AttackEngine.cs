@@ -81,7 +81,13 @@ public static class AttackEngine
             ?? primaryTarget;
 
         bool primaryDisabled = defender.LocationStates[primaryTarget].State == DamageState.Disabled;
-        result.TargetLocation = primaryDisabled ? secondaryTarget : primaryTarget;
+        BodyLocation chosenTarget = primaryDisabled ? secondaryTarget : primaryTarget;
+
+        // If chosen target is also disabled, find any non-disabled location
+        if (defender.LocationStates[chosenTarget].State == DamageState.Disabled)
+            chosenTarget = FindFallbackTarget(defender, chosenTarget) ?? chosenTarget;
+
+        result.TargetLocation = chosenTarget;
 
         if (primaryDisabled && primaryTarget != secondaryTarget)
             round.Log.Add($"  ({primaryTarget} disabled -- redirecting to {secondaryTarget})");
@@ -92,7 +98,8 @@ public static class AttackEngine
                           + attacker.RoundPowerModifier;
 
         int defenderDefense = defender.GetCardDefense(defenderPair.Generic ?? (CardBase)defenderPair.Special!)
-                            + defender.GetCardDefense(defenderPair.Unique ?? (CardBase)defenderPair.Special!);
+                            + defender.GetCardDefense(defenderPair.Unique ?? (CardBase)defenderPair.Special!)
+                            + defender.RoundDefenseModifier;
 
         // --- Keyword modifiers ---
         // ArmorBreak: reduce defender defense by 1
@@ -286,8 +293,11 @@ public static class AttackEngine
             round.Log.Add($"  *** {defender.DisplayName} is DEFEATED by Kill keyword! ***");
         }
 
-        // --- Apply damage ---
-        defender.LocationStates[result.TargetLocation].ApplyDamage(result.NetDamageSteps);
+        // --- Apply damage (with overflow redirect) ---
+        var targetLocState = defender.LocationStates[result.TargetLocation];
+        int capacity = (int)DamageState.Disabled - (int)targetLocState.State;
+        int overflow = Math.Max(0, result.NetDamageSteps - capacity);
+        targetLocState.ApplyDamage(result.NetDamageSteps);
 
         // Record last hit location and accumulate per-location damage for disruption checks
         if (ReferenceEquals(attackerPair, round.PairA))
@@ -303,7 +313,51 @@ public static class AttackEngine
             round.DamageToA[result.TargetLocation] = prevA + result.NetDamageSteps;
         }
 
+        // Redirect overflow steps to another non-disabled location
+        if (overflow > 0)
+        {
+            BodyLocation? overflowLoc = FindFallbackTarget(defender, result.TargetLocation);
+            if (overflowLoc.HasValue)
+            {
+                defender.LocationStates[overflowLoc.Value].ApplyDamage(overflow);
+                round.Log.Add($"  Overflow: {overflow} step(s) redirected to {overflowLoc.Value}.");
+                if (ReferenceEquals(attackerPair, round.PairA))
+                {
+                    round.DamageToB.TryGetValue(overflowLoc.Value, out int prevOvfB);
+                    round.DamageToB[overflowLoc.Value] = prevOvfB + overflow;
+                }
+                else
+                {
+                    round.DamageToA.TryGetValue(overflowLoc.Value, out int prevOvfA);
+                    round.DamageToA[overflowLoc.Value] = prevOvfA + overflow;
+                }
+            }
+        }
+
         return result;
+    }
+
+    /// <summary>
+    /// Finds the first non-disabled location that is not <paramref name="exclude"/>.
+    /// Returns null only if every location is disabled.
+    /// </summary>
+    private static BodyLocation? FindFallbackTarget(FighterInstance defender, BodyLocation exclude)
+    {
+        // Preferred priority: Torso → Head → Core → arms → legs → Stance
+        var priority = new[]
+        {
+            BodyLocation.Torso, BodyLocation.Head, BodyLocation.Core,
+            BodyLocation.LeftArm, BodyLocation.RightArm,
+            BodyLocation.LeftLeg, BodyLocation.RightLeg, BodyLocation.Stance,
+        };
+        foreach (var loc in priority)
+        {
+            if (loc != exclude
+                && defender.LocationStates.ContainsKey(loc)
+                && defender.LocationStates[loc].State != DamageState.Disabled)
+                return loc;
+        }
+        return null;
     }
 
     /// <summary>Process bleed stacks on target fighter at start of their turn.</summary>

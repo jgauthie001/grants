@@ -19,7 +19,7 @@ public static class UniversalCards
         Id              = "universal_freemove",
         Name            = "Free Move",
         Description     = "Reposition freely up to 7 hexes. No bonus power or defense.",
-        RequiredBodyTags = new(),   // pairs with any generic
+        RequiredBodyTags = new() { "leg" },
         Keywords        = new(),
         BasePower       = 0,
         BaseDefense     = 0,
@@ -44,7 +44,7 @@ public static class UniversalCards
         Id              = "universal_hunkerdown",
         Name            = "Hunker Down",
         Description     = "Brace for impact. +10 defense, no movement.",
-        RequiredBodyTags = new(),   // pairs with any generic
+        RequiredBodyTags = new() { "core" },
         Keywords        = new(),
         BasePower       = 0,
         BaseDefense     = 10,

@@ -102,6 +102,34 @@ public abstract class FighterPersona
         PersonaState state) { }
 
     /// <summary>
+    /// Return a pre-round self-choice request if this persona wants the owner to pick from a list
+    /// before card selection. Return null if no choice is needed this round.
+    /// Adding a new list-based pre-round ability only requires overriding these three methods —
+    /// FightScreen handles the UI generically without any per-persona changes.
+    /// </summary>
+    public virtual PersonaChoiceRequest? GetPreRoundSelfChoice(
+        FighterInstance owner,
+        FighterInstance opponent,
+        MatchState match,
+        PersonaState state) => null;
+
+    /// <summary>
+    /// Called once the owner (human or AI) has selected an option Id, or null to skip.
+    /// </summary>
+    public virtual void OnPreRoundSelfChoiceSelected(
+        FighterInstance owner,
+        string? optionId,
+        MatchState match,
+        PersonaState state) { }
+
+    /// <summary>AI decision: returns the selected option Id, or null to skip.</summary>
+    public virtual string? ResolveAiPreRoundSelfChoice(
+        FighterInstance owner,
+        FighterInstance opponent,
+        MatchState match,
+        PersonaState state) => null;
+
+    /// <summary>
     /// Return true if this persona wants to offer the OPPONENT a choice at round start
     /// (before card selection). Called for both fighters' personas each round.
     /// </summary>
@@ -193,6 +221,13 @@ public abstract class FighterPersona
     {
         return new(); // Default: no additional info
     }
+
+    /// <summary>
+    /// Returns overlay markers to be drawn on the hex board (e.g., witch spirits, traps).
+    /// Each entry is a hex position, an RGBA colour (bytes), and a short ASCII label.
+    /// Default: empty — no overlays.
+    /// </summary>
+    public virtual List<BoardOverlay> GetBoardOverlays(PersonaState state) => new();
 }
 
 /// <summary>
@@ -247,6 +282,12 @@ public class PersonaState
         Counters[counterName] = Math.Max(0, Counters[counterName] + delta);
     }
 }
+
+/// <summary>
+/// A single hex board overlay produced by a persona (spirit, trap marker, etc.).
+/// R/G/B/A are 0-255 byte colour components.
+/// </summary>
+public readonly record struct BoardOverlay(HexCoord Position, byte R, byte G, byte B, byte A, string Label);
 
 /// <summary>
 /// Represents an arena-scoped effect placed by a persona.

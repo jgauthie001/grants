@@ -19,14 +19,14 @@ E:\grants\
     │       ├── DefaultFont.spritefont   # Arial 14pt
     │       └── SmallFont.spritefont    # Arial 10pt
     ├── Models/
-    │   ├── Cards/           # Card types and pairing
+    │   ├── Cards/           # Card types, keywords, pairing
     │   ├── Fighter/         # Fighter definition, instance, damage
     │   ├── Board/           # Hex coordinate math and board
-    │   ├── Upgrades/        # Upgrade tree, nodes, fighter progress
+    │   ├── Upgrades/        # FighterUpgradeDef, CardUpgradeSlotDef, FighterProgress, MatchResult
     │   └── Match/           # Match state, player profile, records
     ├── Engine/              # Pure-logic systems (no MonoGame)
     ├── Fighters/
-    │   ├── Grants/          # Grants fighter cards + upgrade tree
+    │   ├── Grants/          # Grants fighter cards, GrantsUpgrades.cs
     │   └── Cursed/          # The Cursed fighter cards + persona
     └── Screens/             # MonoGame UI screens
 ```
@@ -35,7 +35,7 @@ E:\grants\
 
 ```
 PlayerProfile (disk)
-    └─▶ UpgradeEngine.ApplyProgressToInstance()
+    └─▶ UpgradeEngine.ApplyProgressToInstance(instance, progress, upgradeDef, upgradesEnabled)
             └─▶ FighterInstance (match-time state)
 
 CardSelection phase:
@@ -43,14 +43,18 @@ CardSelection phase:
     AI:    AiEngine.SelectPair() → MatchState.SelectedPairB
 
 Resolution phase:
-    ResolutionEngine.ResolveRound()
-        ├─▶ MovementEngine   (speed order, board occupation)
+    ResolutionEngine.ResolveFirstHalf()   (Start + Beginning + Main priority)
+    ResolutionEngine.ResolveSecondHalf()  (Main second + Final both + End)
+        ├─▶ ExecuteFighterPhaseActions()  (per-fighter, per-phase: move → attack → post-move)
+        ├─▶ MovementEngine   (hex pathfinding, board occupation)
         ├─▶ AttackEngine     (range, power vs defense, keywords)
+        ├─▶ ApplyAttackerPostMove()  (post-attack movement + Recoil/FollowThrough/Disengage)
         └─▶ RoundState       (log, damage map, outcome)
 
 Post-match:
-    FighterProgress.RecordWin()
-    UpgradeEngine.SaveProfile()
+    UpgradeEngine.BuildMatchResult(match, playerWon)
+    UpgradeEngine.RecordMatchAndUnlock(progress, upgradeDef, result)  → List<string> newlyUnlocked
+    UpgradeEngine.SaveProfile(profile)
 ```
 
 ## Card System
@@ -109,33 +113,123 @@ Retreat keyword).
 
 ## Resolution Order
 
-1. Compute `CombinedSpeed` for both fighters.
-2. Faster fighter: move, then attack.
-3. Slower fighter: move, then attack (attack cancelled if their generic's
-   body part was **Disabled** during step 2).
-4. Speed tie: both move simultaneously, then both attack simultaneously.
-5. Apply cooldowns (Stagger adds +1 to loser's cooldowns).
-6. Check KO: `IsKnockedOut` = number of `Disabled` locations ≥ `KOThreshold`
-   (default 2).
-7. Stalemate: 5 consecutive rounds with no damage dealt → draw.
+Each round runs five named phases. Card actions fire in the phase they declare
+(via `MovementPhase`, `AttackPhase`, `PostMovementPhase` on the card).
+
+| Step | Phase | Who acts |
+|------|-------|----------|
+| 1 | **Start** | Speed determined; priority player set; persona/stage housekeeping |
+| 2 | **Beginning** | Priority player's declared Beginning actions |
+| 3 | **Beginning** | Second player's declared Beginning actions |
+| 4 | **Main** | Priority player's declared Main actions |
+| 5 | **Main** | Second player's declared Main actions\* |
+| 6 | **Final** | Priority player's declared Final actions |
+| 7 | **Final** | Second player's declared Final actions |
+| 8 | **End** | Cooldowns, bleed, KO/stalemate check |
+
+\* Second player's Main action is cancelled if priority's attack disabled or
+damaged the body location of second's generic card this round.
+
+Speed tie: all phases resolve simultaneously (no midpoint pause).
+
+KO: `IsKnockedOut` = number of `Disabled` locations ≥ `KOThreshold` (default 2).
+
+Stalemate: 5 consecutive rounds with no damage dealt → draw.
+
+## Movement System
+
+### Phase-Driven Actions
+
+Every action on a card declares which phase it fires in:
+
+| Card field | Default phase | Effect |
+|---|---|---|
+| `MovementPhase` (GenericCard) | Beginning | Pre-attack repositioning; player picks hex if Free |
+| `AttackPhase` (UniqueCard / SpecialCard) | Main | The attack itself |
+| `PostMovementPhase` (UniqueCard / SpecialCard) | Final | Post-attack repositioning (always auto) |
+
+Cards can override these defaults to place an action in any phase
+(e.g., a unique with `AttackPhase = Beginning` hits early, or
+`MovementPhase = Main` for a lunge that moves into the attack).
+
+### Card Fields
+
+All card types carry: `MinMovement`, `MaxMovement`,
+`BaseMovementType` (`Approach` / `Retreat` / `Free` / `None`).
+
+`CardPair` exposes:
+- `EffectiveMinMovement` / `EffectiveMaxMovement` / `CombinedMovementType` — generic movement
+- `PostMovementMin` / `PostMovementMax` / `PostMovementType` — unique/special post-move
+- `GenericMovementPhase`, `AttackPhase`, `PostMovementPhase` — phase declarations
+
+### Post-Attack Movement Keywords
+
+| Keyword | Trigger | Effect |
+|---------|---------|--------|
+| `Recoil N` | Always (hit or miss) | Attacker retreats N hexes |
+| `FollowThrough N` | Landed hit only | Attacker advances N hexes |
+| `Disengage N` | Out-of-range / missed only | Attacker retreats N hexes |
+
+Processed in order after card-field post-movement: Recoil → FollowThrough → Disengage.
+Handled by `ResolutionEngine.ApplyAttackerPostMove()`.
+
+### Distribution Targets
+- ~2 average movement per card across all fighters
+- ~1/3 Approach, ~1/3 Retreat, ~1/3 Free; aggressive fighters lean Approach
 
 ## Upgrade System
 
-Each fighter has a **UpgradeTree** with 4 branches × ~8 card-slot nodes +
-1 item node each, and 4 **FinalNodes** (one per branch, gated last).
+Each fighter has a **FighterUpgradeDef** — a flat dictionary of
+`CardUpgradeSlotDef` keyed by `SlotId` (`"cardId:slotIndex"`).
 
-Upgrade points are earned from **PvE wins** and **PvP Casual wins only**
-(ranked wins do not count):
+### Slot Tiers
 
-| Win range | Rate         |
-|-----------|--------------|
-| 1–20      | 1 pt / win   |
-| 21–50     | 1 pt / 2 wins|
-| 51–100    | 1 pt / 3 wins|
-| 100+      | 1 pt / 5 wins|
+| Slot | Gate | Typical reward |
+|------|------|----------------|
+| 0 | 5 distinct matches with this card | +1 stat (Power/Defense/Speed) |
+| 1 | 15 distinct matches with this card | Add keyword |
+| 2 | Mastery condition (see below) | Keyword upgrade or Persona unlock |
 
-`PowerRating` = sum of `PowerRatingValue` across all unlocked nodes.
-Used for ±10 PvP Casual matchmaking.
+### Mastery Condition Types
+
+| Type | Description |
+|------|-------------|
+| `PlayedInMatches` | Card played in N distinct matches |
+| `LandedHits` | Attack with this card landed N times (cumulative) |
+| `LandedVsFaster` | Landed against a faster opponent N times |
+| `LandedAtRange` | Landed at ≥ MinDistance hexes N times |
+| `EventCounter` | Named event counter reaches N (e.g. `follow_through`) |
+| `WonMatchWithCard` | Won N matches where this card was played |
+| `WonWithKillingBlow` | Won N matches where this card dealt the killing blow |
+
+### Progression Tracking (FighterProgress)
+
+Fields saved per fighter: `CardDistinctMatches`, `CardLandedHits`,
+`CardLandedVsFaster`, `CardLandedAtRange`, `CardWinsWithCard`,
+`CardKillingBlows`, `EventCounters` (all `Dictionary<string,int>`),
+`UnlockedSlots` (`HashSet<string>`).
+
+Stats are recorded after each match via:
+```
+UpgradeEngine.BuildMatchResult(match, playerWon)   // builds MatchResult from history
+UpgradeEngine.RecordMatchAndUnlock(progress, upgradeDef, result)  // returns List<string> newly unlocked SlotIds
+```
+
+### Applying Upgrades
+
+```
+UpgradeEngine.ApplyProgressToInstance(instance, progress, upgradeDef, upgradesEnabled)
+```
+
+No-op when `upgradesEnabled = false` (safe to disable for PvP balance).
+`PersonaUnlock` slot type adds a string ID to `FighterInstance.UnlockedPersonaIds`;
+personas query `instance.HasUpgrade("unlock_id")` to conditionally activate mastered behaviours.
+
+### Per-Fighter Slot Definitions
+
+| Fighter | File | Slots |
+|---------|------|-------|
+| Grants  | `Fighters/Grants/GrantsUpgrades.cs` | 54 (18 cards × 3) |
 
 **Ranked PvP** requires ≥ 15 total wins with that specific fighter.
 
@@ -147,7 +241,8 @@ MainMenu
   │       └─▶ StageSelect
   │               └─▶ FightScreen
   │                       └─▶ PostMatchScreen
-  │                               ├─▶ UpgradeTreeScreen
+  │                               ├─▶ UpgradeSelectionScreen  data: (fighterId, List<string> newlyUnlocked)
+  │                               │       └─▶ UpgradeTreeScreen  data: fighterId
   │                               ├─▶ FighterSelect (rematch)
   │                               └─▶ MainMenu
   └─▶ ProfileScreen

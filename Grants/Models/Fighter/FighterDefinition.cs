@@ -23,6 +23,12 @@ public class FighterDefinition
     public List<SpecialCard> SpecialCards { get; init; } = new();
 
     /// <summary>
+    /// Evolution cards for the Evolutionary persona — not selectable in normal
+    /// card selection, only accessible through the persona's evolution choice.
+    /// </summary>
+    public List<SpecialCard> EvolutionCards { get; init; } = new();
+
+    /// <summary>
     /// Which body location, if Disabled, constitutes a loss for this fighter.
     /// Defaults to Head and Torso (both disabled = KO). Override for special fighters.
     /// </summary>
