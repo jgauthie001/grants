@@ -41,10 +41,10 @@ public partial class FightScreen
                 if (_selectedGeneric == null)
                 {
                     // Step 1: Select generic card
-                    if (IsPressed(keys, _prevKeys, Keys.Up) || IsPressed(keys, _prevKeys, Keys.W))
+                    if (IsPressed(keys, _prevKeys, Keys.Left) || IsPressed(keys, _prevKeys, Keys.A))
                         _genericSelectionIndex = (_genericSelectionIndex - 1 + _validGenerics.Count) % _validGenerics.Count;
 
-                    if (IsPressed(keys, _prevKeys, Keys.Down) || IsPressed(keys, _prevKeys, Keys.S))
+                    if (IsPressed(keys, _prevKeys, Keys.Right) || IsPressed(keys, _prevKeys, Keys.D))
                         _genericSelectionIndex = (_genericSelectionIndex + 1) % _validGenerics.Count;
 
                     if (IsPressed(keys, _prevKeys, Keys.Enter))
@@ -69,10 +69,10 @@ public partial class FightScreen
                 else
                 {
                     // Step 2: Select unique/special card
-                    if (IsPressed(keys, _prevKeys, Keys.Up) || IsPressed(keys, _prevKeys, Keys.W))
+                    if (IsPressed(keys, _prevKeys, Keys.Left) || IsPressed(keys, _prevKeys, Keys.A))
                         _uniqueSelectionIndex = (_uniqueSelectionIndex - 1 + _validUniques.Count) % _validUniques.Count;
 
-                    if (IsPressed(keys, _prevKeys, Keys.Down) || IsPressed(keys, _prevKeys, Keys.S))
+                    if (IsPressed(keys, _prevKeys, Keys.Right) || IsPressed(keys, _prevKeys, Keys.D))
                         _uniqueSelectionIndex = (_uniqueSelectionIndex + 1) % _validUniques.Count;
 
                     if (IsPressed(keys, _prevKeys, Keys.Enter))
@@ -98,10 +98,10 @@ public partial class FightScreen
                 if (_p2SelectedGeneric == null)
                 {
                     // P2 Step 1: Select generic card
-                    if (IsPressed(keys, _prevKeys, Keys.Up) || IsPressed(keys, _prevKeys, Keys.W))
+                    if (IsPressed(keys, _prevKeys, Keys.Left) || IsPressed(keys, _prevKeys, Keys.A))
                         _p2GenericIndex = (_p2GenericIndex - 1 + _p2ValidGenerics.Count) % _p2ValidGenerics.Count;
 
-                    if (IsPressed(keys, _prevKeys, Keys.Down) || IsPressed(keys, _prevKeys, Keys.S))
+                    if (IsPressed(keys, _prevKeys, Keys.Right) || IsPressed(keys, _prevKeys, Keys.D))
                         _p2GenericIndex = (_p2GenericIndex + 1) % _p2ValidGenerics.Count;
 
                     if (IsPressed(keys, _prevKeys, Keys.Enter))
@@ -124,10 +124,10 @@ public partial class FightScreen
                 else
                 {
                     // P2 Step 2: Select unique/special card
-                    if (IsPressed(keys, _prevKeys, Keys.Up) || IsPressed(keys, _prevKeys, Keys.W))
+                    if (IsPressed(keys, _prevKeys, Keys.Left) || IsPressed(keys, _prevKeys, Keys.A))
                         _p2UniqueIndex = (_p2UniqueIndex - 1 + _p2ValidUniques.Count) % _p2ValidUniques.Count;
 
-                    if (IsPressed(keys, _prevKeys, Keys.Down) || IsPressed(keys, _prevKeys, Keys.S))
+                    if (IsPressed(keys, _prevKeys, Keys.Right) || IsPressed(keys, _prevKeys, Keys.D))
                         _p2UniqueIndex = (_p2UniqueIndex + 1) % _p2ValidUniques.Count;
 
                     if (IsPressed(keys, _prevKeys, Keys.Enter))

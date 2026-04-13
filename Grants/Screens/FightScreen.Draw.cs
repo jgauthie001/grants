@@ -1,4 +1,4 @@
-using Microsoft.Xna.Framework;
+﻿using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Input;
 using System.Linq;
@@ -273,7 +273,7 @@ public partial class FightScreen
             DrawHex(sb, (int)px, (int)py, (int)L.HexSize - 2, hexColor);
         }
 
-        // Draw stage hazardous hexes (tokens, etc.) — orange/gold, rendered under fighters
+        // Draw stage hazardous hexes (tokens, etc.) â€” orange/gold, rendered under fighters
         var hazardHexes = _match.Stage.GetHazardousHexes(_match.StageState);
         foreach (var hh in hazardHexes)
         {
@@ -284,7 +284,7 @@ public partial class FightScreen
             }
         }
 
-        // Draw persona board overlays (e.g. Revenant Witch spirits) — rendered under fighters
+        // Draw persona board overlays (e.g. Revenant Witch spirits) â€” rendered under fighters
         foreach (var fighter in new[] { _match.FighterA, _match.FighterB })
         {
             var overlays = fighter.Definition.Persona.GetBoardOverlays(fighter.PersonaState);
@@ -335,57 +335,49 @@ public partial class FightScreen
     private void DrawOpponentCards(SpriteBatch sb)
     {
         var opp = _match.FighterB;
-        int x = Layout.RightX, y = 200;
+        int x   = Layout.RightX;
+        int y   = 200;
+        const int GAP = 6;
 
         sb.DrawString(_font, "Opponent Cards", new Vector2(x, y), Color.LightGray);
-        y += 24;
+        y += 26;
 
-        // Generic cards — color by body location damage state
+        // Generic cards as widgets
         sb.DrawString(_smallFont, "Body:", new Vector2(x, y), Color.DimGray);
-        y += 16;
+        y += 14;
         foreach (var card in opp.Definition.GenericCards)
         {
-            var loc = Models.Fighter.FighterInstance.BodyPartToLocation(card.BodyPart);
-            var state = opp.LocationStates[loc].State;
             int cd = opp.GetCooldown(card.Id);
-            Color c = state switch
-            {
-                Models.Fighter.DamageState.Disabled => Color.Red,
-                Models.Fighter.DamageState.Injured  => Color.Orange,
-                Models.Fighter.DamageState.Bruised  => Color.Yellow,
-                _                                   => cd > 0 ? new Color(100, 100, 100) : Color.LightGray,
-            };
-            string cdStr = cd > 0 ? $" [CD:{cd}]" : "";
-            string stateStr = state != Models.Fighter.DamageState.Healthy ? $" [{state}]" : "";
-            sb.DrawString(_smallFont, $"  {card.Name}{stateStr}{cdStr}", new Vector2(x, y), c);
-            y += 16;
+            var loc = Models.Fighter.FighterInstance.BodyPartToLocation(card.BodyPart);
+            bool avail = opp.LocationStates[loc].State != Models.Fighter.DamageState.Disabled && cd == 0;
+            CardWidget.DrawGeneric(sb, _pixel, _font, _smallFont, card, opp,
+                x, y, selected: false, available: avail, cooldown: cd);
+            y += CardWidget.WIDGET_H + GAP;
         }
 
-        y += 6;
-
-        // Unique cards — color by cooldown
+        y += 4;
+        // Unique cards as widgets
         sb.DrawString(_smallFont, "Moves:", new Vector2(x, y), Color.DimGray);
-        y += 16;
+        y += 14;
         foreach (var card in opp.GetAllUniques())
         {
-            int cd = opp.GetCooldown(card.Id);
-            Color c = cd > 0 ? new Color(100, 100, 100) : Color.LightGray;
-            string cdStr = cd > 0 ? $" [CD:{cd}]" : "";
-            sb.DrawString(_smallFont, $"  {card.Name}{cdStr}", new Vector2(x, y), c);
-            y += 16;
+            int cd    = opp.GetCooldown(card.Id);
+            bool avail = cd == 0;
+            CardWidget.DrawUnique(sb, _pixel, _font, _smallFont, card, opp,
+                x, y, selected: false, available: avail, cooldown: cd, pairContext: null);
+            y += CardWidget.WIDGET_H + GAP;
         }
 
         // Special cards
         foreach (var card in opp.Definition.SpecialCards)
         {
-            int cd = opp.GetCooldown(card.Id);
-            Color c = cd > 0 ? new Color(100, 100, 100) : Color.LightGray;
-            string cdStr = cd > 0 ? $" [CD:{cd}]" : "";
-            sb.DrawString(_smallFont, $"  {card.Name}{cdStr}", new Vector2(x, y), c);
-            y += 16;
+            int cd    = opp.GetCooldown(card.Id);
+            bool avail = cd == 0;
+            CardWidget.DrawSpecial(sb, _pixel, _font, _smallFont, card, opp,
+                x, y, selected: false, available: avail, cooldown: cd);
+            y += CardWidget.WIDGET_H + GAP;
         }
     }
-
     private void DrawDamageStates(SpriteBatch sb)
     {
         DrawFighterHealth(sb, _match.FighterA, 20, 20, true);
@@ -435,11 +427,12 @@ public partial class FightScreen
     {
         if (_match.Phase != MatchPhase.CardSelection) return;
 
-        int panelX = 20, panelY = 200;
-        int cx = Game.GraphicsDevice.Viewport.Width / 2;
-        int cy = Game.GraphicsDevice.Viewport.Height / 2;
+        int screenW = Game.GraphicsDevice.Viewport.Width;
+        int screenH = Game.GraphicsDevice.Viewport.Height;
+        int cx = screenW / 2;
+        int cy = screenH / 2;
 
-        // --- Pass-to-P2 overlay ---
+        // â”€â”€ Pass-to-P2 overlay â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         if (_pvpPhase == LocalPvpPhase.PassToP2)
         {
             string msg1 = "Player 1 has chosen.";
@@ -451,251 +444,161 @@ public partial class FightScreen
             return;
         }
 
-        // --- P2 card selection ---
-        if (_pvpPhase == LocalPvpPhase.P2Selecting)
+        // â”€â”€ Determine whose turn it is â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        bool isP2 = _pvpPhase == LocalPvpPhase.P2Selecting;
+        var fighter      = isP2 ? _match.FighterB : _match.FighterA;
+        var availGen     = isP2 ? _p2ValidGenerics : _validGenerics;
+        var availUni     = isP2 ? _p2ValidUniques  : _validUniques;
+        var selGen       = isP2 ? _p2SelectedGeneric : _selectedGeneric;
+        int genIdx       = isP2 ? _p2GenericIndex : _genericSelectionIndex;
+        int uniIdx       = isP2 ? _p2UniqueIndex  : _uniqueSelectionIndex;
+        string playerLabel = isP2 ? "Player 2" : (_isLocalPvP ? "Player 1" : "Player");
+        var defender     = isP2 ? (FighterInstance)_match.FighterA : _match.FighterB;
+
+        // â”€â”€ Header â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        int headerY = 12;
+        string headerText = selGen == null
+            ? $"{playerLabel} - Choose body card:"
+            : $"{playerLabel} - Choose technique for: {AsciiOnly(selGen.Name)}";
+        sb.DrawString(_font, headerText, new Vector2(20, headerY), isP2 ? Color.Cyan : Color.White);
+
+        // â”€â”€ Card row layout â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        const int GAP     = 8;
+        int rowY          = 40;
+        int totalCards    = selGen == null ? availGen.Count : availUni.Count;
+        int rowWidth      = totalCards * (CardWidget.WIDGET_W + GAP) - GAP;
+        int rowStartX     = Math.Max(20, (screenW - rowWidth) / 2);
+
+        if (selGen == null)
         {
-            sb.DrawString(_font, "Player 2 - Choose your cards", new Vector2(panelX, panelY - 30), Color.Cyan);
-
-            if (_p2SelectedGeneric == null)
+            // â”€â”€ STEP 1: Generic card row â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+            for (int i = 0; i < availGen.Count; i++)
             {
-                sb.DrawString(_font, "Select Generic Card:", new Vector2(panelX, panelY), Color.White);
-                for (int i = 0; i < _p2ValidGenerics.Count; i++)
+                var card   = availGen[i];
+                bool sel   = i == genIdx;
+                int cd     = fighter.GetCooldown(card.Id);
+                int wx     = rowStartX + i * (CardWidget.WIDGET_W + GAP);
+                CardWidget.DrawGeneric(sb, _pixel, _font, _smallFont, card, fighter, wx, rowY,
+                    selected: sel, available: true, cooldown: cd);
+            }
+
+            // â”€â”€ Unavailable generics â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+            var disabled = fighter.Definition.GenericCards.Where(c => !availGen.Contains(c)).ToList();
+            if (disabled.Count > 0)
+            {
+                int dRowY     = rowY + CardWidget.WIDGET_H + GAP;
+                int dRowWidth = disabled.Count * (CardWidget.WIDGET_W + GAP) - GAP;
+                int dStartX   = Math.Max(20, (screenW - dRowWidth) / 2);
+                for (int i = 0; i < disabled.Count; i++)
                 {
-                    var card = _p2ValidGenerics[i];
-                    bool sel = i == _p2GenericIndex;
-                    Color c = sel ? Color.Yellow : Color.LightGray;
-                    string mvTypeG = card.BaseMovementType switch
-                    {
-                        Models.Cards.MovementType.Approach => ">",
-                        Models.Cards.MovementType.Retreat  => "<",
-                        Models.Cards.MovementType.Free     => "*",
-                        _                                  => "-",
-                    };
-                    string mvStrG = card.MaxMovement == 0 ? "-" :
-                        card.MinMovement == card.MaxMovement ? $"{mvTypeG}{card.MaxMovement}" :
-                        $"{mvTypeG}{card.MinMovement}-{card.MaxMovement}";
-                    string label = $"{(sel ? ">" : " ")} {card.Name}  [Spd:{card.BaseSpeed:+#;-#;0} Pwr:{card.BasePower} Def:{card.BaseDefense} Mv:{mvStrG}]" + GetKeywordDisplay(card);
-                    sb.DrawString(_smallFont, label, new Vector2(panelX, panelY + 24 + i * 18), c);
+                    var card = disabled[i];
+                    var loc  = Models.Fighter.FighterInstance.BodyPartToLocation(card.BodyPart);
+                    bool dis = fighter.LocationStates[loc].State == Models.Fighter.DamageState.Disabled;
+                    int cd   = fighter.GetCooldown(card.Id);
+                    int wx   = dStartX + i * (CardWidget.WIDGET_W + GAP);
+                    CardWidget.DrawGeneric(sb, _pixel, _font, _smallFont, card, fighter, wx, dRowY,
+                        selected: false, available: false, cooldown: cd);
                 }
-                sb.DrawString(_smallFont, "[Up/Down] Navigate   [Enter] Select",
-                    new Vector2(panelX, panelY + 24 + _p2ValidGenerics.Count * 18 + 8), Color.DimGray);
-            }
-            else
-            {
-                var p2Defender = _match.FighterA;
-                sb.DrawString(_font, $"Select Combo for: {_p2SelectedGeneric.Name}", new Vector2(panelX, panelY), Color.Yellow);
-                if (_p2ValidUniques.Count == 0)
-                {
-                    sb.DrawString(_smallFont, "No compatible moves available", new Vector2(panelX, panelY + 30), Color.Red);
-                    sb.DrawString(_smallFont, "[Backspace] Go back", new Vector2(panelX, panelY + 50), Color.DimGray);
-                    return;
-                }
-                for (int i = 0; i < _p2ValidUniques.Count; i++)
-                {
-                    var card = _p2ValidUniques[i];
-                    bool sel = i == _p2UniqueIndex;
-                    Color c = sel ? Color.Yellow : Color.LightGray;
-                    string cardName = card switch { UniqueCard u => u.Name, SpecialCard s => s.Name, _ => "?" };
-                    var tempPair = new CardPair { Generic = _p2SelectedGeneric, Unique = card as UniqueCard, Special = card as SpecialCard };
-                    string rangeStr = $"{tempPair.EffectiveMinRange}-{tempPair.EffectiveMaxRange}";
-                    string targetStr = card switch
-                    {
-                        UniqueCard u => u.PrimaryTarget == u.SecondaryTarget ? $"{u.PrimaryTarget}" :
-                            p2Defender.LocationStates[u.PrimaryTarget].State == Models.Fighter.DamageState.Disabled
-                                ? $"[{u.PrimaryTarget}]->{u.SecondaryTarget}" : $"{u.PrimaryTarget}->{u.SecondaryTarget}",
-                        SpecialCard s => s.PrimaryTarget == s.SecondaryTarget ? $"{s.PrimaryTarget}" :
-                            p2Defender.LocationStates[s.PrimaryTarget].State == Models.Fighter.DamageState.Disabled
-                                ? $"[{s.PrimaryTarget}]->{s.SecondaryTarget}" : $"{s.PrimaryTarget}->{s.SecondaryTarget}",
-                        _ => "?",
-                    };
-                    Color targetColor = card is UniqueCard uu &&
-                        p2Defender.LocationStates[uu.PrimaryTarget].State == Models.Fighter.DamageState.Disabled
-                        ? Color.Orange : Color.LightCyan;
-                    string label = $"{(sel ? ">" : " ")} {cardName}  [Spd:{card.BaseSpeed:+#;-#;0} Pwr:{card.BasePower} Def:{card.BaseDefense} Rng:{rangeStr}]" + GetKeywordDisplay(card);
-                    sb.DrawString(_smallFont, label, new Vector2(panelX, panelY + 24 + i * 18), c);
-                    var labelSize = _smallFont.MeasureString(label);
-                    sb.DrawString(_smallFont, $" Aim:{targetStr}", new Vector2(panelX + labelSize.X, panelY + 24 + i * 18), targetColor);
-                }
-                sb.DrawString(_smallFont, "[Up/Down] Navigate   [Enter] Commit   [Backspace] Back",
-                    new Vector2(panelX, panelY + 24 + _p2ValidUniques.Count * 18 + 8), Color.DimGray);
-            }
-            return;
-        }
-
-        // --- Normal P1 card selection ---
-        if (_playerCommitted) return;
-
-        if (_selectedGeneric == null)
-        {
-            // Step 1: Select Generic Card
-            sb.DrawString(_font, "Select Generic Card:_pl", new Vector2(panelX, panelY), Color.White);
-
-            for (int i = 0; i < _validGenerics.Count; i++)
-            {
-                var card = _validGenerics[i];
-                bool sel = i == _genericSelectionIndex;
-                Color c = sel ? Color.Yellow : Color.LightGray;
-                string mvTypeG = card.BaseMovementType switch
-                {
-                    Models.Cards.MovementType.Approach => ">",
-                    Models.Cards.MovementType.Retreat  => "<",
-                    Models.Cards.MovementType.Free     => "*",
-                    _                                  => "-",
-                };
-                string mvStrG = card.MaxMovement == 0 ? "-" :
-                    card.MinMovement == card.MaxMovement ? $"{mvTypeG}{card.MaxMovement}" :
-                    $"{mvTypeG}{card.MinMovement}-{card.MaxMovement}";
-                int comboCount = _match.FighterA.GetAvailableUniques().Count(u => _match.FighterA.CanPair(card, u));
-                string comboTag = $" ({comboCount})";
-                string label = $"{(sel ? ">" : " ")} {card.Name}  [Spd:{card.BaseSpeed:+#;-#;0} Pwr:{card.BasePower} Def:{card.BaseDefense} Mv:{mvStrG}]{comboTag}" + GetKeywordDisplay(card);
-                sb.DrawString(_smallFont, label, new Vector2(panelX, panelY + 24 + i * 18), c);
+                sb.DrawString(_smallFont, "Unavailable:", new Vector2(dStartX, dRowY - 14), Color.DimGray);
             }
 
-            // Preview compatible uniques for the highlighted generic
-            int afterPreviewY = panelY + 24 + _validGenerics.Count * 18 + 10;
-            if (_validGenerics.Count > 0)
+            // â”€â”€ Combo preview strip under selected generic â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+            if (availGen.Count > 0)
             {
-                var previewGeneric = _validGenerics[_genericSelectionIndex];
-                var previewAvail = _match.FighterA.GetAvailableUniques()
-                    .Where(u => _match.FighterA.CanPair(previewGeneric, u)).ToList();
-                var previewCd = _match.FighterA.GetAllUniques()
-                    .Where(u => _match.FighterA.CanPair(previewGeneric, u) && _match.FighterA.GetCooldown(u.Id) > 0).ToList();
-                var previewIncompat = _match.FighterA.GetAllUniques()
-                    .Where(u => !_match.FighterA.CanPair(previewGeneric, u)).ToList();
+                var previewed  = availGen[genIdx];
+                var compatible = fighter.GetAvailableUniques()
+                    .Where(u => fighter.CanPair(previewed, u)).ToList();
+                int previewY   = rowY + CardWidget.WIDGET_H + GAP +
+                                 (disabled.Count > 0 ? CardWidget.WIDGET_H + GAP + 14 : 0) + 4;
 
-                int previewY = afterPreviewY;
-                sb.DrawString(_smallFont, $"Combos with {previewGeneric.Name}:", new Vector2(panelX, previewY), Color.DimGray);
-                previewY += 14;
-                foreach (var u in previewAvail)
-                { sb.DrawString(_smallFont, $"  + {u.Name}", new Vector2(panelX, previewY), new Color(100, 200, 120)); previewY += 14; }
-                foreach (var u in previewCd)
-                { sb.DrawString(_smallFont, $"  ~ {u.Name} [CD:{_match.FighterA.GetCooldown(u.Id)}]", new Vector2(panelX, previewY), new Color(130, 130, 130)); previewY += 14; }
-                foreach (var u in previewIncompat)
-                { sb.DrawString(_smallFont, $"  x {u.Name}", new Vector2(panelX, previewY), new Color(80, 80, 80)); previewY += 14; }
+                sb.DrawString(_smallFont, $"Combos with {AsciiOnly(previewed.Name)}:",
+                    new Vector2(20, previewY), Color.DimGray);
+                previewY += 13;
 
-                sb.DrawString(_smallFont, "[Up/Down] Navigate   [Enter] Select",
-                    new Vector2(panelX, previewY + 6), Color.DimGray);
-                afterPreviewY = previewY + 20;
-            }
-
-            // Show disabled/on-cooldown generics so player can see what they've lost
-            var disabledGenerics = _match.FighterA.Definition.GenericCards
-                .Where(c => !_validGenerics.Contains(c))
-                .ToList();
-            if (disabledGenerics.Count > 0)
-            {
-                int offsetY = afterPreviewY + 10;
-                sb.DrawString(_smallFont, "Unavailable:", new Vector2(panelX, offsetY), Color.DimGray);
-                offsetY += 16;
-                foreach (var card in disabledGenerics)
+                int previewRowW  = compatible.Count * (CardWidget.WIDGET_W + GAP) - GAP;
+                int previewStart = Math.Max(20, (screenW - previewRowW) / 2);
+                for (int i = 0; i < compatible.Count; i++)
                 {
-                    var loc = Models.Fighter.FighterInstance.BodyPartToLocation(card.BodyPart);
-                    bool isDisabled = _match.FighterA.LocationStates[loc].State == Models.Fighter.DamageState.Disabled;
-                    int cd = _match.FighterA.GetCooldown(card.Id);
-                    string reason = isDisabled ? "[DISABLED]" : $"[CD:{cd}]";
-                    Color dimColor = isDisabled ? new Color(180, 40, 40) : new Color(100, 100, 100);
-                    sb.DrawString(_smallFont, $"  {card.Name} {reason}", new Vector2(panelX, offsetY), dimColor);
-                    offsetY += 16;
+                    var u  = compatible[i];
+                    int wx = previewStart + i * (CardWidget.WIDGET_W + GAP);
+                    CardWidget.DrawUnique(sb, _pixel, _font, _smallFont, u, fighter, wx, previewY,
+                        selected: false, available: true, cooldown: 0,
+                        pairContext: new CardPair { Generic = previewed, Unique = u });
                 }
             }
+
+            // â”€â”€ Hints â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+            sb.DrawString(_smallFont, "[Left/Right] Navigate   [Enter] Select   [Hover] Tooltip",
+                new Vector2(20, screenH - 28), Color.DimGray);
         }
         else
         {
-            // Step 2: Select Unique/Special Card
-            sb.DrawString(_font, $"Select Combo for: {_selectedGeneric.Name}", new Vector2(panelX, panelY), Color.Yellow);
-
-            if (_validUniques.Count == 0)
+            // â”€â”€ STEP 2: Unique/Special card row â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+            if (availUni.Count == 0)
             {
-                sb.DrawString(_smallFont, "No compatible moves available", new Vector2(panelX, panelY + 30), Color.Red);
-                sb.DrawString(_smallFont, "[Esc] Go back", new Vector2(panelX, panelY + 50), Color.DimGray);
+                sb.DrawString(_smallFont, "No compatible techniques available.",
+                    new Vector2(20, rowY + 20), Color.Red);
+                sb.DrawString(_smallFont, "[Backspace] Back",
+                    new Vector2(20, rowY + 40), Color.DimGray);
                 return;
             }
 
-            var defender = _match.FighterB;
-            for (int i = 0; i < _validUniques.Count; i++)
+            for (int i = 0; i < availUni.Count; i++)
             {
-                var card = _validUniques[i];
-                bool sel = i == _uniqueSelectionIndex;
-                Color c = sel ? Color.Yellow : Color.LightGray;
-                string cardName = card switch
-                {
-                    UniqueCard u => u.Name,
-                    SpecialCard s => s.Name,
-                    _ => "?"
-                };
-                // Compute effective range and combined movement for this pair
-                var tempPair = new CardPair { Generic = _selectedGeneric, Unique = card as UniqueCard, Special = card as SpecialCard };
-                string rangeStr = $"{tempPair.EffectiveMinRange}-{tempPair.EffectiveMaxRange}";
-                int combinedMinMv = tempPair.EffectiveMinMovement;
-                int combinedMaxMv = _match.FighterA.GetCardMovement(_selectedGeneric!)
-                    + _match.FighterA.GetCardMovement(card);
-                string mvType = tempPair.CombinedMovementType switch
-                {
-                    Models.Cards.MovementType.Approach => ">",
-                    Models.Cards.MovementType.Retreat  => "<",
-                    Models.Cards.MovementType.Free     => "*",
-                    _                                  => "-",
-                };
-                string mvStr = combinedMaxMv == 0 ? "-" :
-                    combinedMinMv == combinedMaxMv ? $"{mvType}{combinedMaxMv}" :
-                    $"{mvType}{combinedMinMv}-{combinedMaxMv}";
+                var card = availUni[i];
+                bool sel = i == uniIdx;
+                int cd   = fighter.GetCooldown(card.Id);
+                int wx   = rowStartX + i * (CardWidget.WIDGET_W + GAP);
 
-                // Build target indicator: "Head->Torso" or just "Head" if both are same
-                string targetStr = card switch
-                {
-                    UniqueCard u => u.PrimaryTarget == u.SecondaryTarget
-                        ? $"{u.PrimaryTarget}"
-                        : defender.LocationStates[u.PrimaryTarget].State == Models.Fighter.DamageState.Disabled
-                            ? $"[{u.PrimaryTarget}]->{u.SecondaryTarget}"
-                            : $"{u.PrimaryTarget}->{u.SecondaryTarget}",
-                    SpecialCard s => s.PrimaryTarget == s.SecondaryTarget
-                        ? $"{s.PrimaryTarget}"
-                        : defender.LocationStates[s.PrimaryTarget].State == Models.Fighter.DamageState.Disabled
-                            ? $"[{s.PrimaryTarget}]->{s.SecondaryTarget}"
-                            : $"{s.PrimaryTarget}->{s.SecondaryTarget}",
-                    _ => "?",
-                };
-                Color targetColor = card switch
-                {
-                    UniqueCard u when defender.LocationStates[u.PrimaryTarget].State == Models.Fighter.DamageState.Disabled
-                        => Color.Orange,
-                    _ => Color.LightCyan,
-                };
-
-                string label = $"{(sel ? ">" : " ")} {cardName}  [Spd:{card.BaseSpeed:+#;-#;0} Pwr:{card.BasePower} Def:{card.BaseDefense} Mv:{mvStr} Rng:{rangeStr}]" + GetKeywordDisplay(card);
-                sb.DrawString(_smallFont, label, new Vector2(panelX, panelY + 24 + i * 18), c);
-                // Draw target indicator to the right of the main label
-                var labelSize = _smallFont.MeasureString(label);
-                sb.DrawString(_smallFont, $" Aim:{targetStr}", new Vector2(panelX + labelSize.X, panelY + 24 + i * 18), targetColor);
+                var tempPair = new CardPair { Generic = selGen, Unique = card as UniqueCard, Special = card as SpecialCard };
+                if (card is UniqueCard uc)
+                    CardWidget.DrawUnique(sb, _pixel, _font, _smallFont, uc, fighter, wx, rowY,
+                        selected: sel, available: true, cooldown: cd, pairContext: tempPair);
+                else if (card is SpecialCard sc)
+                    CardWidget.DrawSpecial(sb, _pixel, _font, _smallFont, sc, fighter, wx, rowY,
+                        selected: sel, available: true, cooldown: cd);
             }
 
-            sb.DrawString(_smallFont, "[Up/Down] Navigate   [Enter] Commit   [Backspace] Back",
-                new Vector2(panelX, panelY + 24 + _validUniques.Count * 18 + 8), Color.DimGray);
+            // Selected generic recap widget on far left
+            int recapX = 20;
+            int recapY = rowY;
+            if (rowStartX > recapX + CardWidget.WIDGET_W + GAP)
+            {
+                sb.DrawString(_smallFont, "Using:", new Vector2(recapX, recapY - 14), Color.DimGray);
+                CardWidget.DrawGeneric(sb, _pixel, _font, _smallFont, selGen, fighter, recapX, recapY,
+                    selected: false, available: true);
+            }
 
-            // Show on-cooldown uniques and incompatible uniques
-            var unavailableUniques = _match.FighterA.GetAllUniques()
-                .Where(u => !_validUniques.Contains(u) && _match.FighterA.GetCooldown(u.Id) > 0)
-                .ToList();
-            var incompatibleUniques = _match.FighterA.GetAllUniques()
-                .Where(u => !_match.FighterA.CanPair(_selectedGeneric!, u))
-                .ToList();
-            int trailingY = panelY + 24 + _validUniques.Count * 18 + 30;
-            foreach (var u in unavailableUniques)
+            // Unavailable uniques (on cooldown)
+            var unavailable = fighter.GetAllUniques()
+                .Where(u => !availUni.Contains(u) && fighter.GetCooldown(u.Id) > 0).ToList();
+            if (unavailable.Count > 0)
             {
-                int cd = _match.FighterA.GetCooldown(u.Id);
-                sb.DrawString(_smallFont, $"  ~ {u.Name} [CD:{cd}]",
-                    new Vector2(panelX, trailingY), new Color(130, 130, 130));
-                trailingY += 16;
+                int dRowY     = rowY + CardWidget.WIDGET_H + GAP + 14;
+                int dStartX   = Math.Max(20, (screenW - unavailable.Count * (CardWidget.WIDGET_W + GAP) + GAP) / 2);
+                sb.DrawString(_smallFont, "On cooldown:", new Vector2(dStartX, rowY + CardWidget.WIDGET_H + GAP), Color.DimGray);
+                for (int i = 0; i < unavailable.Count; i++)
+                {
+                    var u  = unavailable[i];
+                    int wx = dStartX + i * (CardWidget.WIDGET_W + GAP);
+                    CardWidget.DrawUnique(sb, _pixel, _font, _smallFont, u, fighter, wx, dRowY,
+                        selected: false, available: false, cooldown: fighter.GetCooldown(u.Id),
+                        pairContext: new CardPair { Generic = selGen, Unique = u });
+                }
             }
-            foreach (var u in incompatibleUniques)
-            {
-                string tags = u.RequiredBodyTags.Count > 0 ? string.Join("/", u.RequiredBodyTags) : "any";
-                sb.DrawString(_smallFont, $"  x {u.Name} [needs: {tags}]",
-                    new Vector2(panelX, trailingY), new Color(80, 80, 80));
-                trailingY += 16;
-            }
+
+            sb.DrawString(_smallFont, "[Left/Right] Navigate   [Enter] Commit   [Backspace] Back",
+                new Vector2(20, screenH - 28), Color.DimGray);
         }
     }
+
+    private static string AsciiOnly(string s)
+    {
+        var b = new System.Text.StringBuilder(s.Length);
+        foreach (char c in s) if (c >= 32 && c <= 126) b.Append(c);
+        return b.ToString();
+    }
+
 
     private void DrawResolutionStep(SpriteBatch sb)
     {
@@ -711,11 +614,11 @@ public partial class FightScreen
             var step = _resolutionSteps[displayIdx];
 
             int totalSteps = _resolutionSteps.Count;
-            string stepLabel = $"Round action {displayIdx + 1}/{totalSteps}:";
-            sb.DrawString(_smallFont, stepLabel, new Vector2(logX, logY), new Color(150, 150, 200));
+            sb.DrawString(_smallFont, $"Step {displayIdx + 1}/{totalSteps}",
+                new Vector2(logX, logY), new Color(100, 100, 160));
             logY += 14;
 
-            int maxLines = Math.Min(step.Count, 7);
+            int maxLines = Math.Min(step.Count, 10);
             for (int i = 0; i < maxLines; i++)
             {
                 var filtered = new System.Text.StringBuilder();
@@ -724,31 +627,57 @@ public partial class FightScreen
                     if (c >= 32 && c <= 126) filtered.Append(c);
                     else if (c == '\n' || c == '\t') filtered.Append(' ');
                 }
-                string safeText = filtered.ToString();
-                // Indent lines (start with spaces) are keyword/detail lines — highlight differently
-                Color lineColor = step[i].StartsWith("  ") ? new Color(230, 190, 120) : Color.LightGray;
-                sb.DrawString(_smallFont, safeText, new Vector2(logX, logY + i * 14), lineColor);
+                string safeText = filtered.ToString().Trim();
+                if (safeText.Length == 0) { logY += 6; continue; }
+
+                if (safeText.StartsWith("---"))
+                {
+                    // Phase header -- colored bar + label
+                    string label = safeText.Replace("-", "").Trim();
+                    Color barColor = label switch
+                    {
+                        var s when s.Contains("Beginning") => new Color(60,  120, 220),
+                        var s when s.Contains("Main")      => new Color(200, 140,  30),
+                        var s when s.Contains("Final")     => new Color(180,  50,  50),
+                        var s when s.Contains("Start")     => new Color(80,  170,  80),
+                        var s when s.Contains("End")       => new Color(100, 100, 100),
+                        _                                  => new Color(120, 120, 160),
+                    };
+                    sb.Draw(_pixel, new Rectangle(logX, logY, 180, 14), barColor * 0.35f);
+                    sb.Draw(_pixel, new Rectangle(logX, logY, 3, 14), barColor);
+                    sb.DrawString(_smallFont, " " + label.ToUpper(), new Vector2(logX + 4, logY), barColor);
+                    logY += 16;
+                }
+                else if (step[i].StartsWith("  "))
+                {
+                    sb.DrawString(_smallFont, "  " + safeText, new Vector2(logX + 8, logY), new Color(230, 190, 120));
+                    logY += 13;
+                }
+                else
+                {
+                    sb.DrawString(_smallFont, safeText, new Vector2(logX, logY), Color.LightGray);
+                    logY += 13;
+                }
             }
 
-            int promptY = logY + maxLines * 14 + 4;
-
+            logY += 4;
             if (_match.Phase == MatchPhase.MatchOver && _resolutionFullyDisplayed)
             {
                 // Handled by DrawMatchOver
             }
             else if (_match.Phase == MatchPhase.MatchOver)
             {
-                sb.DrawString(_smallFont, "[Enter] Continue...", new Vector2(logX, promptY), Color.Yellow);
+                sb.DrawString(_smallFont, "[Enter] Continue...", new Vector2(logX, logY), Color.Yellow);
             }
             else if (_resolutionFullyDisplayed)
             {
-                sb.DrawString(_smallFont, "[Enter/Space] Next Round", new Vector2(logX, promptY), Color.DimGray);
+                sb.DrawString(_smallFont, "[Enter/Space] Next Round", new Vector2(logX, logY), Color.DimGray);
             }
             else
             {
                 bool isMidpoint = _needsSecondHalf && displayIdx == _resolutionSteps.Count - 1;
                 string hint = isMidpoint ? "[Enter] Continue (opponent acts)..." : "[Enter] Next";
-                sb.DrawString(_smallFont, hint, new Vector2(logX, promptY), Color.Yellow);
+                sb.DrawString(_smallFont, hint, new Vector2(logX, logY), Color.Yellow);
             }
         }
         catch { /* skip on error */ }
@@ -761,123 +690,89 @@ public partial class FightScreen
 
         int screenW = Game.GraphicsDevice.Viewport.Width;
         int screenH = Game.GraphicsDevice.Viewport.Height;
+        int cx      = screenW / 2;
 
-        // Dark overlay panel covering lower portion of screen
-        sb.Draw(_pixel, new Rectangle(0, screenH / 2 - 40, screenW, screenH / 2 + 40), Color.Black * 0.88f);
+        sb.Draw(_pixel, new Rectangle(0, 0, screenW, screenH), Color.Black * 0.78f);
 
         var pairA = _match.SelectedPairA!;
         var pairB = _match.SelectedPairB!;
-        var fa = _match.FighterA;
-        var fb = _match.FighterB;
+        var fa    = _match.FighterA;
+        var fb    = _match.FighterB;
 
-        // Compute combined stats (mirrors ResolutionEngine logic)
+        // Compute speeds
         int rawSpeedA = 0;
         if (pairA.Generic != null) rawSpeedA += fa.GetCardSpeed(pairA.Generic);
-        if (pairA.Unique != null) rawSpeedA += fa.GetCardSpeed(pairA.Unique);
+        if (pairA.Unique  != null) rawSpeedA += fa.GetCardSpeed(pairA.Unique);
         else if (pairA.Special != null) rawSpeedA += fa.GetCardSpeed(pairA.Special);
         int speedA = rawSpeedA + fa.RoundSpeedModifier;
 
         int rawSpeedB = 0;
         if (pairB.Generic != null) rawSpeedB += fb.GetCardSpeed(pairB.Generic);
-        if (pairB.Unique != null) rawSpeedB += fb.GetCardSpeed(pairB.Unique);
+        if (pairB.Unique  != null) rawSpeedB += fb.GetCardSpeed(pairB.Unique);
         else if (pairB.Special != null) rawSpeedB += fb.GetCardSpeed(pairB.Special);
         int speedB = rawSpeedB + fb.RoundSpeedModifier;
 
-        int powerA = (pairA.Generic?.BasePower ?? 0) + (pairA.Unique?.BasePower ?? pairA.Special?.BasePower ?? 0) + fa.RoundPowerModifier;
-        int defA   = (pairA.Generic?.BaseDefense ?? 0) + (pairA.Unique?.BaseDefense ?? pairA.Special?.BaseDefense ?? 0);
-        int powerB = (pairB.Generic?.BasePower ?? 0) + (pairB.Unique?.BasePower ?? pairB.Special?.BasePower ?? 0) + fb.RoundPowerModifier;
-        int defB   = (pairB.Generic?.BaseDefense ?? 0) + (pairB.Unique?.BaseDefense ?? pairB.Special?.BaseDefense ?? 0);
-
-        int panelY = screenH / 2 - 30;
-        int leftX  = 80;
-        int rightX = screenW - 420;
-        int cx     = screenW / 2;
-
         // Header
+        int topY   = screenH / 4;
         string header = $"ROUND {_match.CurrentRound} - CARDS REVEALED";
         float hw = _font.MeasureString(header).X;
-        sb.DrawString(_font, header, new Vector2(cx - hw / 2f, panelY), Color.Gold);
-        panelY += 32;
+        sb.DrawString(_font, header, new Vector2(cx - hw / 2f, topY), Color.Gold);
+        topY += 30;
 
-        // Fighter names
-        sb.DrawString(_font, fa.DisplayName.ToUpper(), new Vector2(leftX, panelY), Color.CornflowerBlue);
-        string vsText = "VS";
-        float vsW = _font.MeasureString(vsText).X;
-        sb.DrawString(_font, vsText, new Vector2(cx - vsW / 2f, panelY), new Color(130, 130, 130));
-        sb.DrawString(_font, fb.DisplayName.ToUpper(), new Vector2(rightX, panelY), Color.Crimson);
-        panelY += 26;
+        // Two card groups side-by-side around center
+        const int GAP  = 8;
+        int groupW     = CardWidget.WIDGET_W * 2 + GAP;
+        int p1Left     = cx - GAP / 2 - groupW;
+        int p2Left     = cx + GAP / 2;
+        int widgetY    = topY + 24;
 
-        // Generic card name (+ keywords)
-        string genNameA = pairA.Generic?.Name ?? pairA.Special?.Name ?? "?";
-        string genNameB = pairB.Generic?.Name ?? pairB.Special?.Name ?? "?";
-        string genKwA = pairA.Generic != null ? GetKeywordDisplay(pairA.Generic) : "";
-        string genKwB = pairB.Generic != null ? GetKeywordDisplay(pairB.Generic) : "";
-        sb.DrawString(_smallFont, genNameA + genKwA, new Vector2(leftX, panelY), Color.White);
-        sb.DrawString(_smallFont, genNameB + genKwB, new Vector2(rightX, panelY), Color.White);
-        panelY += 16;
+        // Fighter name labels
+        sb.DrawString(_font, AsciiOnly(fa.DisplayName).ToUpper(), new Vector2(p1Left, topY), Color.CornflowerBlue);
+        string vs  = "VS";
+        float vsW  = _font.MeasureString(vs).X;
+        sb.DrawString(_font, vs, new Vector2(cx - vsW / 2f, topY), new Color(130, 130, 130));
+        sb.DrawString(_font, AsciiOnly(fb.DisplayName).ToUpper(), new Vector2(p2Left, topY), Color.Crimson);
 
-        // Unique/special card name (+ keywords)
+        // P1 widgets
+        if (pairA.Generic != null)
+            CardWidget.DrawGeneric(sb, _pixel, _font, _smallFont, pairA.Generic, fa,
+                p1Left, widgetY, selected: false, available: true, cooldown: 0);
+        int p1UniX = p1Left + CardWidget.WIDGET_W + GAP;
         if (pairA.Unique != null)
-        {
-            string uniA = $"+ {pairA.Unique.Name}" + GetKeywordDisplay(pairA.Unique);
-            sb.DrawString(_smallFont, uniA, new Vector2(leftX, panelY), Color.LightGray);
-        }
-        else if (pairA.Special != null && pairA.Generic == null)
-        {
-            sb.DrawString(_smallFont, $"+ {pairA.Special.Name}" + GetKeywordDisplay(pairA.Special), new Vector2(leftX, panelY), Color.LightGray);
-        }
+            CardWidget.DrawUnique(sb, _pixel, _font, _smallFont, pairA.Unique, fa,
+                p1UniX, widgetY, selected: false, available: true, cooldown: 0, pairContext: pairA);
+        else if (pairA.Special != null)
+            CardWidget.DrawSpecial(sb, _pixel, _font, _smallFont, pairA.Special, fa,
+                p1UniX, widgetY, selected: false, available: true, cooldown: 0);
+
+        // P2 widgets
+        if (pairB.Generic != null)
+            CardWidget.DrawGeneric(sb, _pixel, _font, _smallFont, pairB.Generic, fb,
+                p2Left, widgetY, selected: false, available: true, cooldown: 0);
+        int p2UniX = p2Left + CardWidget.WIDGET_W + GAP;
         if (pairB.Unique != null)
-        {
-            string uniB = $"+ {pairB.Unique.Name}" + GetKeywordDisplay(pairB.Unique);
-            sb.DrawString(_smallFont, uniB, new Vector2(rightX, panelY), Color.LightGray);
-        }
-        else if (pairB.Special != null && pairB.Generic == null)
-        {
-            sb.DrawString(_smallFont, $"+ {pairB.Special.Name}" + GetKeywordDisplay(pairB.Special), new Vector2(rightX, panelY), Color.LightGray);
-        }
-        panelY += 16;
-
-        // Combined stats
-        Color spdColorA = speedA > speedB ? Color.LimeGreen : speedA < speedB ? Color.OrangeRed : Color.White;
-        Color spdColorB = speedB > speedA ? Color.LimeGreen : speedB < speedA ? Color.OrangeRed : Color.White;
-        string statsA = $"Spd:{speedA:+#;-#;0}  Pwr:{powerA}  Def:{defA}";
-        string statsB = $"Spd:{speedB:+#;-#;0}  Pwr:{powerB}  Def:{defB}";
-        sb.DrawString(_smallFont, statsA, new Vector2(leftX, panelY), spdColorA);
-        sb.DrawString(_smallFont, statsB, new Vector2(rightX, panelY), spdColorB);
-        panelY += 16;
-
-        // Range and aim
-        string rangeA = $"Rng:{pairA.EffectiveMinRange}-{pairA.EffectiveMaxRange}";
-        string rangeB = $"Rng:{pairB.EffectiveMinRange}-{pairB.EffectiveMaxRange}";
-        string aimA   = GetRevealAimString(pairA);
-        string aimB   = GetRevealAimString(pairB);
-        sb.DrawString(_smallFont, $"{rangeA}  Aim:{aimA}", new Vector2(leftX, panelY), Color.LightCyan);
-        sb.DrawString(_smallFont, $"{rangeB}  Aim:{aimB}", new Vector2(rightX, panelY), Color.LightCyan);
-        panelY += 20;
+            CardWidget.DrawUnique(sb, _pixel, _font, _smallFont, pairB.Unique, fb,
+                p2UniX, widgetY, selected: false, available: true, cooldown: 0, pairContext: pairB);
+        else if (pairB.Special != null)
+            CardWidget.DrawSpecial(sb, _pixel, _font, _smallFont, pairB.Special, fb,
+                p2UniX, widgetY, selected: false, available: true, cooldown: 0);
 
         // Speed order
+        int afterY = widgetY + CardWidget.WIDGET_H + 10;
         string orderText;
-        Color orderColor;
+        Color  orderColor;
         if (speedA > speedB)
-        {
-            orderText  = $"{fa.DisplayName} acts FIRST";
-            orderColor = Color.LimeGreen;
-        }
+        { orderText = $"{AsciiOnly(fa.DisplayName)} acts FIRST  (Spd {speedA:+#;-#;0} vs {speedB:+#;-#;0})"; orderColor = Color.LimeGreen; }
         else if (speedB > speedA)
-        {
-            orderText  = $"{fb.DisplayName} acts FIRST";
-            orderColor = Color.OrangeRed;
-        }
+        { orderText = $"{AsciiOnly(fb.DisplayName)} acts FIRST  (Spd {speedB:+#;-#;0} vs {speedA:+#;-#;0})"; orderColor = Color.OrangeRed; }
         else
-        {
-            orderText  = "SIMULTANEOUS (tied speed)";
-            orderColor = Color.Yellow;
-        }
-        float ow = _smallFont.MeasureString(orderText).X;
-        sb.DrawString(_smallFont, orderText, new Vector2(cx - ow / 2f, panelY), orderColor);
-        panelY += 18;
+        { orderText = $"SIMULTANEOUS  (Spd {speedA:+#;-#;0} tied)"; orderColor = Color.Yellow; }
 
-        // Pre-round log (persona/stage choices that happened this round)
+        float ow = _smallFont.MeasureString(orderText).X;
+        sb.DrawString(_smallFont, orderText, new Vector2(cx - ow / 2f, afterY), orderColor);
+        afterY += 16;
+
+        // Pre-round log
         if (_preRoundLog.Count > 0)
         {
             for (int i = 0; i < Math.Min(_preRoundLog.Count, 3); i++)
@@ -886,15 +781,15 @@ public partial class FightScreen
                 foreach (char c in _preRoundLog[i])
                     if (c >= 32 && c <= 126) filt.Append(c);
                 float lw = _smallFont.MeasureString(filt.ToString()).X;
-                sb.DrawString(_smallFont, filt.ToString(), new Vector2(cx - lw / 2f, panelY + i * 13), new Color(220, 180, 100));
+                sb.DrawString(_smallFont, filt.ToString(), new Vector2(cx - lw / 2f, afterY + i * 13), new Color(220, 180, 100));
             }
-            panelY += Math.Min(_preRoundLog.Count, 3) * 13;
+            afterY += Math.Min(_preRoundLog.Count, 3) * 13;
         }
 
         // Prompt
         string prompt = "[Enter/Space] Begin Round";
         float pw = _smallFont.MeasureString(prompt).X;
-        sb.DrawString(_smallFont, prompt, new Vector2(cx - pw / 2f, panelY), Color.Yellow);
+        sb.DrawString(_smallFont, prompt, new Vector2(cx - pw / 2f, afterY + 8), Color.Yellow);
     }
 
     private static string GetRevealAimString(CardPair pair)
@@ -957,16 +852,16 @@ public partial class FightScreen
     private void DrawHex(SpriteBatch sb, int cx, int cy, int size, Color color)
     {
         // Pointy-top hexagon filled via horizontal scanlines.
-        // 6 vertices at 30°, 90°, 150°, 210°, 270°, 330° from center.
+        // 6 vertices at 30Â°, 90Â°, 150Â°, 210Â°, 270Â°, 330Â° from center.
         // For each scanline row, compute left/right X edges from the hex boundary.
         float r = size;
         float h = r;          // half-height = r (pointy-top: top vertex at cy - r)
-        float w = r * 0.866f; // half-width  = r * sin(60°)
+        float w = r * 0.866f; // half-width  = r * sin(60Â°)
 
         // The hex has 3 zones (top-to-bottom for pointy-top):
-        //   Zone A: cy-r  to  cy-r/2   — top triangle (narrows as y increases, width = 2w*(y-top)/(r/2))
-        //   Zone B: cy-r/2 to cy+r/2  — rectangular band (full width = 2w)
-        //   Zone C: cy+r/2 to cy+r    — bottom triangle (narrows, width = 2w*(bottom-y)/(r/2))
+        //   Zone A: cy-r  to  cy-r/2   â€” top triangle (narrows as y increases, width = 2w*(y-top)/(r/2))
+        //   Zone B: cy-r/2 to cy+r/2  â€” rectangular band (full width = 2w)
+        //   Zone C: cy+r/2 to cy+r    â€” bottom triangle (narrows, width = 2w*(bottom-y)/(r/2))
 
         float alpha = color.A / 255f * 0.85f;
         Color c = color * alpha;

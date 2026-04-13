@@ -1,5 +1,6 @@
 ﻿using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
+using Microsoft.Xna.Framework.Input;
 using Grants.Engine;
 using Grants.Models.Match;
 using Grants.Screens;
@@ -20,11 +21,22 @@ public class Game1 : Game
     private readonly Dictionary<ScreenType, GameScreen> _screens = new();
     private GameScreen _currentScreen = null!;
 
+    // Resolution presets: (width, height)
+    private static readonly (int W, int H)[] ResolutionPresets =
+    {
+        (1280, 720),
+        (1600, 900),
+        (1920, 1080),
+        (2560, 1440),
+    };
+    private int _resolutionIndex = 2; // default: 1920×1080
+    private KeyboardState _prevKeys;
+
     public Game1()
     {
         _graphics = new GraphicsDeviceManager(this);
-        _graphics.PreferredBackBufferWidth = 1920;
-        _graphics.PreferredBackBufferHeight = 1080;
+        _graphics.PreferredBackBufferWidth  = ResolutionPresets[_resolutionIndex].W;
+        _graphics.PreferredBackBufferHeight = ResolutionPresets[_resolutionIndex].H;
         Content.RootDirectory = "Content";
         IsMouseVisible = true;
     }
@@ -108,8 +120,37 @@ public class Game1 : Game
 
     protected override void Update(GameTime gameTime)
     {
+        var keys = Keyboard.GetState();
+
+        // F9 = smaller preset, F10 = larger preset, F11 = fullscreen toggle
+        if (keys.IsKeyDown(Keys.F9) && !_prevKeys.IsKeyDown(Keys.F9))
+        {
+            _resolutionIndex = Math.Max(0, _resolutionIndex - 1);
+            ApplyResolution();
+        }
+        else if (keys.IsKeyDown(Keys.F10) && !_prevKeys.IsKeyDown(Keys.F10))
+        {
+            _resolutionIndex = Math.Min(ResolutionPresets.Length - 1, _resolutionIndex + 1);
+            ApplyResolution();
+        }
+        else if (keys.IsKeyDown(Keys.F11) && !_prevKeys.IsKeyDown(Keys.F11))
+        {
+            _graphics.IsFullScreen = !_graphics.IsFullScreen;
+            _graphics.ApplyChanges();
+        }
+
+        _prevKeys = keys;
         _currentScreen.Update(gameTime);
         base.Update(gameTime);
+    }
+
+    private void ApplyResolution()
+    {
+        var (w, h) = ResolutionPresets[_resolutionIndex];
+        _graphics.PreferredBackBufferWidth  = w;
+        _graphics.PreferredBackBufferHeight = h;
+        _graphics.IsFullScreen = false;
+        _graphics.ApplyChanges();
     }
 
     protected override void Draw(GameTime gameTime)
